@@ -1,0 +1,33 @@
+{% load static %}
+<!doctype html>
+<html lang="fa-IR" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{% block title %}مدیریت خدمات{% endblock %} | همراه خدمات</title><link rel="stylesheet" href="{% static 'app.css' %}"><script src="{% static 'app.js' %}" defer></script></head>
+<body>
+<a class="skip" href="#main">رفتن به محتوای اصلی</a>
+<aside class="sidebar">
+  <a class="brand" href="{% url 'planning-dashboard' %}"><span class="brand-icon">ب</span><span>همراه خدمات<small>فضای مدیریت و بهبود خدمات</small></span></a>
+  <div class="nav-caption">فضای کاری</div>
+  <nav aria-label="منوی اصلی">
+    <a href="{% url 'planning-dashboard' %}" {% if mode == 'crm-planning' %}aria-current="page"{% endif %}>▤ برنامه‌ریزی</a>
+    <a href="{% url 'crm-actions' %}" {% if mode == 'crm-actions' %}aria-current="page"{% endif %}>◷ اقدام‌های برنامه‌ریزی</a>
+    <a href="{% url 'system-settings' %}" {% if mode == 'settings' %}aria-current="page"{% endif %}>⚙ تنظیمات</a>
+    {% if not crm_mode %}
+    <a href="{% url 'today' %}" {% if mode == 'today' %}aria-current="page"{% endif %}><span aria-hidden="true">◷</span> کارهای امروز</a>
+    <a href="{% url 'programs' %}" {% if mode == 'programs' %}aria-current="page"{% endif %}><span aria-hidden="true">▤</span> برنامه‌های مشتریان</a>
+    <a href="{% url 'decisions' %}" {% if mode == 'decisions' %}aria-current="page"{% endif %}><span aria-hidden="true">◇</span> نیازمند تصمیم</a>
+    {% endif %}
+  </nav>
+  <div class="sidebar-note"><span class="small-label">هدف مشترک ما</span><p>پیگیری روشن‌تر،<br>خدمت باکیفیت‌تر.</p><small>اطلاعات ناقص، نشانه کم‌کاری نیست.</small></div>
+  <div class="sidebar-bottom"><a href="{% url 'versions' %}">تاریخچه نگارش‌ها <bdi>{{ app_version }}</bdi></a><small>نسخه محلی · CRM فقط خواندنی</small><a href="{% url 'today' %}">محیط نمونه قبلی</a></div>
+</aside>
+<div class="workspace">
+  <header class="topbar"><span>مدیریت خدمات پس از فروش <span class="muted"> / فضای آزمایشی</span></span><div class="top-actions"><time data-date="{{ today|date:'Y-m-d' }}">{{ today|date:'Y-m-d' }}</time><span class="avatar">م</span>{% if user.is_authenticated %}<form action="{% url 'logout' %}" method="post">{% csrf_token %}<button class="text-button">خروج از نمونه</button></form>{% endif %}</div></header>
+  {% if crm_mode %}<div class="demo-banner"><span><strong>CRM فقط خواندنی</strong> — اطلاعات از Viewهای انتخابی بازخوانی می‌شوند؛ اقدام‌ها و تصمیم‌ها فقط در این برنامه ذخیره می‌شوند.</span><span class="badge neutral">اجرا روی رایانه میزبان</span></div>{% else %}<div class="demo-banner"><span><strong>محیط نمونه قدیمی</strong> — داده‌های این بخش ساختگی‌اند؛ برای داده‌های CRM وارد ماژول برنامه‌ریزی شوید.</span></div>{% endif %}
+  <main id="main" tabindex="-1">
+    <div aria-live="polite">{% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}</div>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>همراه خدمات · برای تصمیم بهتر، با شواهد روشن <span>نسخه <bdi>{{ app_version }}</bdi></span></footer>
+</div>
+<dialog id="help-dialog" aria-labelledby="help-title"><div class="dialog-head"><h2 id="help-title">راهنمای این بخش</h2><button type="button" data-close-help aria-label="بستن راهنما">×</button></div><p id="help-content"></p><button class="button secondary" type="button" data-close-help>متوجه شدم</button></dialog>
+</body></html>

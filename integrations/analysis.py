@@ -1,0 +1,60 @@
+"""Evidence-led normalization; no semantic inference from titles or absent notes."""
+from xml.etree import ElementTree as ET
+from uuid import UUID
+
+FORMAT = '@OData.Community.Display.V1.FormattedValue'
+
+def guid(value):
+    try:
+        return str(UUID(str(value)))
+    except (ValueError, TypeError, AttributeError):
+        return ''
+
+def label(row, name):
+    return str(row.get(name + FORMAT) or row.get(name) or '')
+
+def normalize(rows, xml, notes=None, activities=None):
+    entity = ET.fromstring(xml).find('entity')
+    parent_aliases = [link.get('alias') for link in entity.findall('link-entity') if link.get('name') == 'incident' and link.get('to') == 'brd_plannedcase' and link.get('alias')]
+    notes_by_case, activities_by_case = {}, {}
+    for row in notes or []:
+        target = guid(row.get('_objectid_value') or row.get('objectid'))
+        notes_by_case.setdefault(target, []).append({'id': guid(row.get('annotationid')), 'title': row.get('subject') or '', 'text': row.get('notetext') or '', 'date': row.get('modifiedon') or row.get('createdon') or ''})
+    for row in activities or []:
+        target = guid(row.get('_regardingobjectid_value') or row.get('regardingobjectid'))
+        activities_by_case.setdefault(target, []).append({'id': guid(row.get('activityid')), 'title': row.get('subject') or '', 'text': row.get('description') or '', 'due': row.get('scheduledend') or '', 'state': row.get('statecode'), 'state_label': label(row, 'statecode')})
+    result = {}
+    for row in rows:
+        identifier = guid(row.get('incidentid'))
+        if not identifier:
+            raise ValueError('View کیس، شناسه معتبر incidentid برنگرداند؛ دریافت ناقص پذیرفته نشد.')
+        parent = guid(row.get('_brd_plannedcase_value') or row.get('brd_plannedcase'))
+        parent_status, parent_title = '', label(row, '_brd_plannedcase_value')
+        for alias in parent_aliases:
+            parent_status = label(row, alias + '.statuscode') or parent_status
+            parent_title = label(row, alias + '.title') or parent_title
+        customer_key = '_brd_account_value' if row.get('_brd_account_value') else '_customerid_value'
+        case_notes = sorted(notes_by_case.get(identifier, []), key=lambda n: n['date'], reverse=True)
+        result[identifier] = {
+            'crm_id': identifier, 'number': str(row.get('ticketnumber') or ''), 'title': row.get('title') or '',
+            'customer_id': guid(row.get(customer_key)), 'customer': label(row, customer_key),
+            'source_status': label(row, 'statuscode'), 'parent_id': parent, 'parent_title': parent_title, 'parent_status': parent_status,
+            'evidence': {'created_on': row.get('createdon'), 'modified_on': row.get('modifiedon'), 'planning_started': row.get('brd_startplanningdate'), 'owner': label(row, '_ownerid_value'), 'state': row.get('statecode'), 'notes': case_notes, 'activities': activities_by_case.get(identifier, []), 'parent_notes': notes_by_case.get(parent, []), 'parent_activities': activities_by_case.get(parent, [])},
+        }
+    return list(result.values())
+
+def reasons(case, options, notes_loaded, today):
+    from django.utils.dateparse import parse_datetime
+    items = []
+    if not case.parent_id:
+        items.append('برنامه مرتبط در داده دریافتی مشخص نیست')
+    elif case.parent_status in [s.strip() for s in options.parent_review_statuses.split(',') if s.strip()]:
+        items.append('وضعیت برنامه مرتبط نیازمند تطبیق است؛ خطا قطعی نیست')
+    if case.source_status.casefold() == 'done' and case.evidence.get('state') == 0:
+        items.append('رفع در نسخه / تأیید نتیجه مشتری نیازمند بررسی است')
+    notes = case.evidence.get('notes', [])
+    if notes_loaded and notes:
+        stamp = parse_datetime(notes[0]['date'])
+        if stamp and (today - stamp.date()).days > options.stale_days:
+            items.append('آخرین یادداشت در View انتخابی قدیمی است؛ دلیل نبود کار نیست')
+    return items
