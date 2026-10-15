@@ -10,4 +10,4 @@
 - Update feature help, affected contracts and append-only release history with behavior changes. Run relevant checks; report what actually ran and what did not.
 - Do not claim WCAG or ASVS compliance without documented verification. Keep pending criteria explicit.
 - CRM is read-only in the first release. Local planning decisions must survive synchronization.
-- Local preview runtime is implemented. Read docs/preview.md for actual scope. Network deployment, organizational roles, PostgreSQL and CRM integration are not implemented; do not expose the preview to the LAN.
+- Local preview and read-only CRM View integration are implemented. Read docs/crm-planning.md for current scope and docs/preview.md for the earlier synthetic prototype. Network deployment, organizational roles and PostgreSQL are not implemented; do not expose the preview to the LAN. CRM records and local actions stay under ignored private/.

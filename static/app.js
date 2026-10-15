@@ -1,4 +1,27 @@
 'use strict';
+const themeButton = document.querySelector('[data-theme-toggle]');
+const refreshThemeButton = () => {
+  const dark = document.documentElement.dataset.theme === 'dark';
+  themeButton?.setAttribute('aria-pressed', String(dark));
+  if (themeButton) themeButton.querySelector('[data-theme-label]').textContent = dark ? 'حالت روشن' : 'حالت تاریک';
+};
+refreshThemeButton();
+themeButton?.addEventListener('click', () => {
+  const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem('service-theme', theme); } catch (_) { /* display still works */ }
+  refreshThemeButton();
+});
+document.querySelectorAll('table').forEach(table => {
+  const labels = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+  table.classList.add('responsive-table');
+  table.querySelectorAll('tbody tr').forEach(row => {
+    Array.from(row.cells).forEach((cell, index) => {
+      if (cell.colSpan === 1) cell.dataset.label = labels[index] || '';
+      else cell.classList.add('full-row');
+    });
+  });
+});
 const helpDialog = document.querySelector('#help-dialog');
 let helpTrigger;
 document.querySelectorAll('[data-help]').forEach(button => {
@@ -51,3 +74,20 @@ if (jobPanel && ['queued', 'running'].includes(jobPanel.dataset.jobState)) {
   };
   setTimeout(pollJob, 1500);
 }
+
+const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
+const sidebar = document.querySelector('#main-sidebar');
+let sidebarClosed = window.matchMedia('(max-width: 700px)').matches;
+try { const saved = localStorage.getItem('service-sidebar'); if (saved !== null) sidebarClosed = saved === 'closed'; } catch (_) {}
+function refreshSidebar() {
+  document.documentElement.classList.toggle('sidebar-closed', sidebarClosed);
+  sidebarToggle?.setAttribute('aria-expanded', String(!sidebarClosed));
+  sidebarToggle?.setAttribute('aria-label', sidebarClosed ? 'باز کردن منوی کناری' : 'بستن منوی کناری');
+  if (sidebar) sidebar.inert = sidebarClosed;
+}
+refreshSidebar();
+sidebarToggle?.addEventListener('click', () => {
+  sidebarClosed = !sidebarClosed;
+  refreshSidebar();
+  try { localStorage.setItem('service-sidebar', sidebarClosed ? 'closed' : 'open'); } catch (_) {}
+});

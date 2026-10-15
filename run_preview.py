@@ -21,5 +21,5 @@ if __name__ == '__main__':
     # This launcher is the single local process; interrupted jobs never publish snapshots.
     SyncJob.objects.filter(status__in=['queued', 'running']).update(status='failed', message='اجرا قطع شده بود؛ دریافت را دوباره شروع کنید. داده موفق قبلی حفظ شد.', finished_at=timezone.now())
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
-    print(f'Local preview: http://127.0.0.1:{port}', flush=True)
+    print(f'Local application: http://127.0.0.1:{port}', flush=True)
     call_command('runserver', f'127.0.0.1:{port}', use_reloader=False)

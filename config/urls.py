@@ -1,15 +1,12 @@
-from django.urls import path
+from django.urls import path, include
 from django.contrib.staticfiles.views import serve
 from planning import views
 from integrations import views as crm
+from config.views import home
 
 urlpatterns = [
-    path('', crm.dashboard, name='planning-dashboard'),
-    path('planning/', crm.dashboard),
-    path('planning/cases/<int:pk>/', crm.case_detail, name='crm-case'),
-    path('planning/cases/<int:pk>/actions/new/', crm.create_action, name='crm-action-new'),
-    path('planning/actions/', crm.actions_page, name='crm-actions'),
-    path('planning/actions/<int:pk>/complete/', crm.complete_action, name='crm-action-complete'),
+    path('', home, name='home'),
+    path('planning/', include('planning.urls')),
     path('settings/', crm.settings_page, name='system-settings'),
     path('settings/planning/', crm.settings_page, {'module': True}, name='planning-settings'),
     path('crm/jobs/start/<str:kind>/', crm.begin_job, name='crm-start-job'),

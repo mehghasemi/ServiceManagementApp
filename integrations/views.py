@@ -26,7 +26,12 @@ def operator_required(view):
 def active_snapshot(user):
     config = configuration()
     options = module_settings()
-    return PlanningSnapshot.objects.filter(owner=user, scope=config.scope, selection_key=selection_key(options)).order_by('-fetched_at').first()
+    snapshot = PlanningSnapshot.objects.filter(owner=user, scope=config.scope, selection_key=selection_key(options)).order_by('-fetched_at').first()
+    # Case identity is stable across Views, but a historical View must never show
+    # newer evidence silently written through a different selection.
+    if snapshot and snapshot.cases.filter(fetched_at__gt=snapshot.fetched_at).exists():
+        return None
+    return snapshot
 
 def current_cases(user):
     snapshot = active_snapshot(user)
@@ -43,6 +48,11 @@ def dashboard(request):
     missing_parent = rows.filter(parent_id='').count()
     review_statuses = [v.strip() for v in options.parent_review_statuses.split(',') if v.strip()]
     parent_review = rows.filter(parent_status__in=review_statuses).count()
+    from planning.recommendations import recommendations
+    suggestions = recommendations(current_cases(request.user), request.user, review_statuses, timezone.localdate())
+    from planning.charts import status_distribution
+    chart_rows = status_distribution(current_cases(request.user))
+    action_coverage = round((total - without_action) * 100 / total, 1) if total else None
     query = request.GET.get('q', '').strip()[:100]
     bucket = request.GET.get('bucket', '')
     if query:
@@ -57,7 +67,7 @@ def dashboard(request):
     for case in page:
         case.review_reasons = reasons(case, options, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
     groups = current_cases(request.user).exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
-    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action, 'missing_parent': missing_parent, 'parent_review': parent_review, 'query': query, 'bucket': bucket, 'groups': groups, 'crm_mode': True})
+    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action, 'missing_parent': missing_parent, 'parent_review': parent_review, 'query': query, 'bucket': bucket, 'groups': groups, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action, 'suggestions': suggestions[:20], 'suggestion_count': len(suggestions)})
 
 @operator_required
 def settings_page(request, module=False):

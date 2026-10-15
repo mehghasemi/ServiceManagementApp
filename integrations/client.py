@@ -122,8 +122,12 @@ try {
                 if name in available and name not in selected:
                     ET.SubElement(entity, 'attribute', {'name': name})
         original_top = root.get('top')
-        root.set('count', '500')
-        root.set('page', '1')
+        if original_top:
+            root.attrib.pop('count', None)
+            root.attrib.pop('page', None)
+        else:
+            root.set('count', '500')
+            root.set('page', '1')
         root.attrib.pop('paging-cookie', None)
         all_rows, seen_pages = [], set()
         next_link = None

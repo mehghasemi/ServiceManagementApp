@@ -18,8 +18,8 @@ def welcome(request):
     if request.method == 'POST':
         user = get_object_or_404(get_user_model(), username='local-preview', is_active=True)
         login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-        return redirect('planning-dashboard')
-    return render(request, 'welcome.html')
+        return redirect('home')
+    return render(request, 'welcome.html', {'crm_mode': True})
 
 def sign_out(request):
     if request.method != 'POST':
