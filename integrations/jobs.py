@@ -10,20 +10,24 @@ def configuration():
     obj, _ = SystemSettings.objects.get_or_create(pk=1)
     return obj
 
-def module_settings():
+def module_settings(module="planning"):
     obj = configuration()
-    return ModuleSettings.objects.get_or_create(module='planning', scope=obj.scope)[0]
+    defaults = {'parent_review_statuses': 'Completed,Canceled,Cancelled'} if module == 'projects' else {}
+    return ModuleSettings.objects.get_or_create(module=module, scope=obj.scope, defaults=defaults)[0]
 
 def selection_key(options):
     return str(options.case_view_id or '') + ':' + str(options.note_view_id or '') + ':' + str(options.activity_view_id or '')
 
-def start_job(owner, kind, launch=True):
+def start_job(owner, kind, launch=True, module="planning"):
+    if module not in ('planning', 'projects'):
+        raise CRMError('ماژول معتبر نیست.')
     if kind not in ('test', 'catalog', 'sync'):
         raise CRMError('نوع عملیات معتبر نیست.')
     with transaction.atomic():
         system = SystemSettings.objects.select_for_update().get(pk=configuration().pk)
-        options = module_settings()
+        options = module_settings(module)
         config = {name: getattr(system, name) for name in ('base_url', 'organization', 'api_version', 'request_timeout')}
+        config['module'] = module
         config['selection_key'] = selection_key(options)
         config['views'] = {}
         for name in ('case_view', 'note_view', 'activity_view'):
@@ -31,7 +35,7 @@ def start_job(owner, kind, launch=True):
             if view:
                 config['views'][name] = {'crm_id': str(view.crm_id), 'kind': view.kind, 'entity': view.entity, 'name': view.name}
         if kind == 'sync' and 'case_view' not in config['views']:
-            raise CRMError('ابتدا View اصلی برنامه‌ریزی را در تنظیمات ماژول انتخاب و ذخیره کنید.')
+            raise CRMError('ابتدا View اصلی را در تنظیمات ماژول انتخاب و ذخیره کنید.')
         try:
             job = SyncJob.objects.create(owner=owner, kind=kind, scope=system.scope, config=config)
         except IntegrityError as error:
@@ -62,6 +66,10 @@ def run_job(pk):
             with transaction.atomic():
                 for row in catalog:
                     CRMView.objects.update_or_create(scope=job.scope, kind=row['kind'], crm_id=row['crm_id'], defaults={'name': row['name'], 'entity': row['entity'], 'refreshed_at': timezone.now()})
+        elif job.config.get('module') == 'projects':
+            from projects.services import publish_snapshot
+            publish_snapshot(job, client, checkpoint)
+            return
         else:
             views = job.config['views']
             rows, xml, name = client.fetch_view(views['case_view'])

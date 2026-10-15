@@ -93,12 +93,18 @@ class IntegrationTests(TestCase):
         self.assertEqual(response.context['chart_rows'][0]['percent'], 100)
         self.assertEqual(response.context['action_coverage'], 0)
 
+    def test_planning_job_history_excludes_projects_and_preserves_legacy(self):
+        legacy = SyncJob.objects.create(owner=self.user, scope=self.scope if hasattr(self, 'scope') else self.config.scope, kind='test', status='success', config={})
+        SyncJob.objects.create(owner=self.user, scope=self.config.scope, kind='test', status='success', config={'module': 'projects'})
+        response = self.client.get('/planning/')
+        self.assertEqual(response.context['last_job'].pk, legacy.pk)
+
     def test_home_lists_modules_without_fake_project_routes(self):
         response = self.client.get('/')
         self.assertContains(response, 'داشبورد')
         self.assertContains(response, 'مدیریت پروژه‌ها')
         self.assertContains(response, 'هنوز پیاده‌سازی نشده است')
-        self.assertNotContains(response, 'href="/projects/"')
+        self.assertContains(response, 'href="/projects/"')
 
     def test_switching_views_never_presents_mixed_snapshot(self):
         self.sync()

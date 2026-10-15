@@ -77,8 +77,7 @@ if (jobPanel && ['queued', 'running'].includes(jobPanel.dataset.jobState)) {
 
 const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
 const sidebar = document.querySelector('#main-sidebar');
-let sidebarClosed = window.matchMedia('(max-width: 700px)').matches;
-try { const saved = localStorage.getItem('service-sidebar'); if (saved !== null) sidebarClosed = saved === 'closed'; } catch (_) {}
+let sidebarClosed = document.documentElement.classList.contains('sidebar-closed');
 function refreshSidebar() {
   document.documentElement.classList.toggle('sidebar-closed', sidebarClosed);
   sidebarToggle?.setAttribute('aria-expanded', String(!sidebarClosed));

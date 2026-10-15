@@ -6,6 +6,7 @@ from config.views import home
 
 urlpatterns = [
     path('', home, name='home'),
+    path('projects/', include('projects.urls')),
     path('planning/', include('planning.urls')),
     path('settings/', crm.settings_page, name='system-settings'),
     path('settings/planning/', crm.settings_page, {'module': True}, name='planning-settings'),

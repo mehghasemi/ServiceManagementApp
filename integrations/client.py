@@ -87,11 +87,11 @@ try {
             for row in self.paged(f'{kind}?$select=name,{key},returnedtypecode'):
                 entity = str(row.get('returnedtypecode', ''))
                 entity = {'112': 'incident', '5': 'annotation', '4200': 'activitypointer', '4212': 'task'}.get(entity, entity)
-                if entity in ('incident', 'annotation', 'task', 'activitypointer'):
+                if entity in ('incident', 'annotation', 'task', 'activitypointer', 'brd_project'):
                     rows.append({'kind': kind, 'crm_id': str(UUID(row[key])), 'name': row.get('name', ''), 'entity': entity})
         return rows
 
-    def fetch_view(self, view):
+    def fetch_view(self, view, related_ids=None):
         kind, identifier = view['kind'], str(UUID(view['crm_id']))
         if kind not in ('userqueries', 'savedqueries'):
             raise CRMError('نوع View معتبر نیست.')
@@ -104,13 +104,14 @@ try {
         except ET.ParseError as error:
             raise CRMError('ساختار View قابل خواندن نیست.') from error
         entity = root.find('entity')
-        sets = {'incident': 'incidents', 'annotation': 'annotations', 'task': 'tasks', 'activitypointer': 'activitypointers'}
+        sets = {'incident': 'incidents', 'annotation': 'annotations', 'task': 'tasks', 'activitypointer': 'activitypointers', 'brd_project': 'brd_projects'}
         if entity is None or entity.get('name') != view['entity'] or view['entity'] not in sets or root.get('aggregate') == 'true':
             raise CRMError('View انتخاب‌شده باید فهرست رکوردهای غیرتجمیعی همان موجودیت باشد.')
         # Retain the complete View filters/joins. Add only available columns, never rows.
         names = self.paged(f"EntityDefinitions(LogicalName='{view['entity']}')/Attributes?$select=LogicalName")
         available = {row['LogicalName'] for row in names}
         needed = {
+            'brd_project': ('brd_projectid', 'brd_name', 'statuscode', 'statecode', 'brd_account', 'brd_customer', 'brd_projectmanager', 'brd_plannedenddate', 'brd_realenddate', 'brd_lastnotedate', 'brd_lastaction', 'brd_currentphase', 'brd_progress', 'modifiedon'),
             'incident': ('incidentid', 'ticketnumber', 'title', 'createdon', 'modifiedon', 'statuscode', 'statecode', 'customerid', 'brd_account', 'brd_plannedcase', 'ownerid', 'brd_startplanningdate'),
             'annotation': ('annotationid', 'objectid', 'subject', 'notetext', 'modifiedon', 'createdon'),
             'task': ('activityid', 'regardingobjectid', 'subject', 'description', 'scheduledend', 'statecode', 'modifiedon'),
@@ -121,6 +122,14 @@ try {
             for name in needed:
                 if name in available and name not in selected:
                     ET.SubElement(entity, 'attribute', {'name': name})
+        if related_ids is not None:
+            if view['entity'] != 'annotation':
+                raise CRMError('محدودسازی ارتباط فقط برای View یادداشت مجاز است.')
+            if not related_ids:
+                return [], xml, definition.get('name', '')
+            condition = ET.SubElement(ET.SubElement(entity, 'filter', {'type': 'and'}), 'condition', {'attribute': 'objectid', 'operator': 'in'})
+            for identifier in sorted(set(related_ids)):
+                ET.SubElement(condition, 'value').text = str(UUID(identifier))
         original_top = root.get('top')
         if original_top:
             root.attrib.pop('count', None)

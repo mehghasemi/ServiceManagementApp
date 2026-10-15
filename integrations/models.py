@@ -129,3 +129,14 @@ class ActionAudit(models.Model):
     event = models.CharField(max_length=100)
     data = models.JSONField(default=dict)
     created_at = models.DateTimeField(default=timezone.now)
+
+
+class ProjectSnapshot(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    scope = models.CharField(max_length=64)
+    selection_key = models.CharField(max_length=100)
+    job = models.OneToOneField(SyncJob, on_delete=models.PROTECT)
+    source_name = models.CharField(max_length=300)
+    fetched_at = models.DateTimeField(default=timezone.now)
+    records = models.JSONField(default=list)
+    coverage = models.JSONField(default=dict)

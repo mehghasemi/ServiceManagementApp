@@ -41,15 +41,13 @@ def current_cases(user):
 def dashboard(request):
     config, options = configuration(), module_settings()
     snapshot = active_snapshot(request.user)
-    last_job = SyncJob.objects.filter(owner=request.user, scope=config.scope).order_by('-created_at').first()
+    last_job = SyncJob.objects.filter(owner=request.user, scope=config.scope).filter(Q(config__module='planning') | ~Q(config__has_key='module')).order_by('-created_at').first()
     rows = current_cases(request.user).annotate(open_actions=Count('local_actions', filter=Q(local_actions__actor=request.user, local_actions__status='open')))
     total = rows.count()
     without_action = rows.filter(open_actions=0).count()
     missing_parent = rows.filter(parent_id='').count()
     review_statuses = [v.strip() for v in options.parent_review_statuses.split(',') if v.strip()]
     parent_review = rows.filter(parent_status__in=review_statuses).count()
-    from planning.recommendations import recommendations
-    suggestions = recommendations(current_cases(request.user), request.user, review_statuses, timezone.localdate())
     from planning.charts import status_distribution
     chart_rows = status_distribution(current_cases(request.user))
     action_coverage = round((total - without_action) * 100 / total, 1) if total else None
@@ -63,16 +61,21 @@ def dashboard(request):
         rows = rows.filter(parent_id='')
     elif bucket == 'review':
         rows = rows.filter(parent_status__in=review_statuses)
+    customer_filter, parent_filter = request.GET.get('customer', '')[:50], request.GET.get('parent', '')[:50]
+    if customer_filter and parent_filter:
+        rows = rows.filter(customer_id=customer_filter, parent_id=parent_filter)
     page = Paginator(rows.order_by('customer', 'parent_id', 'number'), options.page_size).get_page(request.GET.get('page'))
     for case in page:
         case.review_reasons = reasons(case, options, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
     groups = current_cases(request.user).exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
-    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action, 'missing_parent': missing_parent, 'parent_review': parent_review, 'query': query, 'bucket': bucket, 'groups': groups, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action, 'suggestions': suggestions[:20], 'suggestion_count': len(suggestions)})
+    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action, 'missing_parent': missing_parent, 'parent_review': parent_review, 'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'parent_filter': parent_filter, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
 
 @operator_required
 def settings_page(request, module=False):
-    obj = module_settings() if module else configuration()
-    form_class = ModuleForm if module else SystemForm
+    module_key = 'projects' if module == 'projects' else 'planning'
+    from projects.forms import ProjectForm
+    obj = module_settings(module_key) if module else configuration()
+    form_class = ProjectForm if module == 'projects' else ModuleForm if module else SystemForm
     kwargs = {'scope': obj.scope} if module else {}
     before = model_to_dict(obj)
     form = form_class(request.POST if request.method == 'POST' else None, instance=obj, initial={'revision': obj.revision}, **kwargs)
@@ -91,10 +94,10 @@ def settings_page(request, module=False):
                     status = 409
                 else:
                     obj.refresh_from_db()
-                    SettingsAudit.objects.create(actor=request.user, area='planning' if module else 'system', before=before, after=model_to_dict(obj))
+                    SettingsAudit.objects.create(actor=request.user, area=module_key if module else 'system', before=before, after=model_to_dict(obj))
                     messages.success(request, 'تنظیمات ذخیره شد. برای دریافت داده، دکمه دریافت را بزنید.')
-                    return redirect('planning-settings' if module else 'system-settings')
-    return render(request, 'crm/settings.html', {'form': form, 'module_settings_page': module, 'mode': 'settings', 'crm_mode': True}, status=status)
+                    return redirect('projects-settings' if module == 'projects' else 'planning-settings' if module else 'system-settings')
+    return render(request, 'crm/settings.html', {'form': form, 'module_settings_page': module, 'project_settings': module == 'projects', 'mode': 'settings', 'crm_mode': True}, status=status)
 
 @operator_required
 def begin_job(request, kind):
@@ -112,7 +115,7 @@ def job_status(request, pk):
     job = get_object_or_404(SyncJob, pk=pk, owner=request.user)
     if request.GET.get('format') == 'json':
         return JsonResponse({'status': job.status, 'message': job.message, 'progress': job.progress})
-    return render(request, 'crm/job.html', {'job': job, 'crm_mode': True, 'mode': 'crm-planning'})
+    return render(request, 'crm/job.html', {'job': job, 'crm_mode': True, 'mode': 'crm-planning', 'job_module': job.config.get('module', 'planning'), 'active_module': job.config.get('module', 'planning')})
 
 @operator_required
 def cancel_job(request, pk):
@@ -177,3 +180,12 @@ def actions_page(request):
     for action in page:
         action.in_current_view = action.case_id in active_ids
     return render(request, 'crm/actions.html', {'page': page, 'crm_mode': True, 'mode': 'crm-actions'})
+
+
+@operator_required
+def suggestions_page(request):
+    from planning.group_recommendations import grouped_recommendations
+    options = module_settings()
+    statuses = [s.strip() for s in options.parent_review_statuses.split(',') if s.strip()]
+    rows = grouped_recommendations(current_cases(request.user), request.user, timezone.localdate(), statuses)
+    return render(request, 'crm/group_recommendations.html', {'crm_mode': True, 'mode': 'planning-suggestions', 'page': Paginator(rows, 15).get_page(request.GET.get('page'))})
