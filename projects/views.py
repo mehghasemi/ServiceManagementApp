@@ -20,19 +20,18 @@ def snapshot_for(user):
 def dashboard(request):
     options = module_settings('projects')
     snapshot = snapshot_for(request.user)
-    rows, charts, suggestions = dashboard_data(snapshot.records if snapshot else [], bool(snapshot and snapshot.coverage.get('notes')), options.stale_days, timezone.localdate(), options.parent_review_statuses.split(','))
+    rows, charts, rule_counts = dashboard_data(snapshot.records if snapshot else [], bool(snapshot and snapshot.coverage.get('notes')), options, timezone.localdate())
     total = len(rows)
-    overdue = sum(r['overdue'] for r in rows)
-    no_manager = sum(r['no_manager'] for r in rows)
-    stale = sum(r['stale'] for r in rows)
+    attention_count = sum(bool(r['attention_rules']) for r in rows)
+    suggestions = [entry for entry in rule_counts if entry['count']]
     query = request.GET.get('q', '').strip()[:100]
     bucket = request.GET.get('bucket', '')
     if query:
         rows = [r for r in rows if query.casefold() in ' '.join([r['title'], r['customer'], r['manager']]).casefold()]
-    if bucket in ('overdue', 'no_manager', 'stale', 'no_note'):
-        rows = [r for r in rows if r[bucket]]
+    if bucket:
+        rows = [r for r in rows if any(str(rule.pk) == bucket for rule in r['attention_rules'])]
     last_job = SyncJob.objects.filter(owner=request.user, scope=configuration().scope, config__module='projects').order_by('-created_at').first()
-    return render(request, 'projects/dashboard.html', {'crm_mode': True, 'mode': 'projects', 'options': options, 'snapshot': snapshot, 'last_job': last_job, 'total': total, 'overdue': overdue, 'no_manager': no_manager, 'stale': stale, 'chart_rows': charts, 'suggestions': suggestions, 'query': query, 'bucket': bucket, 'page': Paginator(rows, options.page_size).get_page(request.GET.get('page'))})
+    return render(request, 'projects/dashboard.html', {'crm_mode': True, 'mode': 'projects', 'options': options, 'snapshot': snapshot, 'last_job': last_job, 'total': total, 'attention_count': attention_count, 'rule_counts': rule_counts, 'chart_rows': charts, 'suggestions': suggestions, 'query': query, 'bucket': bucket, 'page': Paginator(rows, options.page_size).get_page(request.GET.get('page'))})
 
 
 @operator_required
@@ -41,7 +40,10 @@ def detail(request, identifier):
     project = next((row for row in snapshot.records if row['id'] == str(identifier)), None) if snapshot else None
     if project is None:
         raise Http404
-    return render(request, 'projects/detail.html', {'crm_mode': True, 'project': project, 'snapshot': snapshot})
+    from criteria.engine import ensure_rules, project_facts, matches
+    facts = project_facts(project, module_settings('projects'), bool(snapshot.coverage.get('notes')), timezone.localdate())
+    attention_rules = [r for r in ensure_rules(module_settings('projects')) if r.purpose == 'attention' and matches(r, facts) is True]
+    return render(request, 'projects/detail.html', {'crm_mode': True, 'project': project, 'snapshot': snapshot, 'attention_rules': attention_rules})
 
 
 @operator_required

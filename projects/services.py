@@ -62,31 +62,17 @@ def publish_snapshot(job, client, checkpoint):
         SyncJob.objects.filter(pk=job.pk).update(status='success', progress=len(records), finished_at=timezone.now(), message=f'{len(records)} پروژه یکتا و یادداشت‌های مرتبط دریافت شد')
 
 
-def dashboard_data(records, notes_loaded, stale_days, today, closed_statuses=("Completed", "Canceled", "Cancelled")):
-    result = []
-    for source in records:
-        row = dict(source)
-        end = day(row.get('planned_end'))
-        ongoing = row.get('state') == 0 and row.get('status', '').strip().casefold() not in {v.strip().casefold() for v in closed_statuses}
-        row['ongoing'] = ongoing
-        row['overdue'] = bool(ongoing and end and end < today)
-        row['no_manager'] = ongoing and not row.get('manager')
-        note_day = day(row['notes'][0]['date']) if row.get('notes') else None
-        row['stale'] = bool(ongoing and notes_loaded and note_day and (today - note_day).days > stale_days)
-        row['no_note'] = bool(ongoing and notes_loaded and not row.get('notes'))
-        row['last_report'] = note_day
-        result.append(row)
-    counts = Counter(r['status'] or 'نامشخص' for r in result)
-    peak = max(counts.values(), default=1)
-    charts = [{'label': key, 'count': count, 'width': round(count*100/peak, 1)} for key, count in counts.most_common()]
-    suggestions = []
-    for key, title, impact in [
-        ('overdue', 'جلسه بازبینی موعد و موانع پروژه‌های عقب‌افتاده', 'تعیین تعهد معتبر، مسئول رفع مانع و زمان پیگیری'),
-        ('no_manager', 'تکمیل مسئولیت مدیریت پروژه‌ها', 'روشن‌شدن پاسخ‌گویی و مسیر پیگیری'),
-        ('stale', 'درخواست گزارش وضعیت تازه برای پروژه‌ها', 'کاهش تصمیم‌گیری بر پایه گزارش قدیمی؛ قدمت گزارش نشانه نبود کار نیست'),
-        ('no_note', 'بررسی پوشش یادداشت‌های پروژه', 'تفکیک نقص ثبت گزارش از محدودیت View یادداشت'),
-    ]:
-        count = sum(r[key] for r in result)
-        if count:
-            suggestions.append({'key': key, 'title': title, 'count': count, 'impact': impact})
-    return result, charts, suggestions
+
+def dashboard_data(records, notes_loaded, options, today):
+    from criteria.engine import ensure_rules, project_facts, evaluate_records
+    rules = ensure_rules(options)
+    rows = [dict(r) for r in records]
+    evaluated, counts = evaluate_records([(r, project_facts(r, options, notes_loaded, today)) for r in rows], rules)
+    by_id = {entry['item']['id']: entry['rules'] for entry in evaluated}
+    for row in rows:
+        row['attention_rules'] = by_id.get(row['id'], [])
+        row['last_report'] = day(row['notes'][0]['date']) if row.get('notes') else None
+    statuses = Counter(r['status'] or 'نامشخص' for r in rows)
+    peak = max(statuses.values(), default=1)
+    charts = [{'label': key, 'count': count, 'width': round(count*100/peak, 1)} for key, count in statuses.most_common()]
+    return rows, charts, counts

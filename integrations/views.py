@@ -12,7 +12,6 @@ from .models import SystemSettings, ModuleSettings, SettingsAudit, SyncJob, Plan
 from .forms import SystemForm, ModuleForm, ActionForm, CompleteForm
 from .jobs import configuration, module_settings, start_job, selection_key
 from .client import CRMError
-from .analysis import reasons
 
 def operator_required(view):
     @login_required
@@ -45,9 +44,11 @@ def dashboard(request):
     rows = current_cases(request.user).annotate(open_actions=Count('local_actions', filter=Q(local_actions__actor=request.user, local_actions__status='open')))
     total = rows.count()
     without_action = rows.filter(open_actions=0).count()
-    missing_parent = rows.filter(parent_id='').count()
-    review_statuses = [v.strip() for v in options.parent_review_statuses.split(',') if v.strip()]
-    parent_review = rows.filter(parent_status__in=review_statuses).count()
+    from criteria.engine import ensure_rules, planning_facts, evaluate_records, matches
+    rules = ensure_rules(options)
+    facts_rows = planning_facts(current_cases(request.user), request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
+    attention_rows, rule_counts = evaluate_records(facts_rows, rules)
+    hit_map = {entry['item'].pk: entry['rules'] for entry in attention_rows}
     from planning.charts import status_distribution
     chart_rows = status_distribution(current_cases(request.user))
     action_coverage = round((total - without_action) * 100 / total, 1) if total else None
@@ -57,24 +58,33 @@ def dashboard(request):
         rows = rows.filter(Q(title__icontains=query) | Q(number__icontains=query) | Q(customer__icontains=query))
     if bucket == 'without_action':
         rows = rows.filter(open_actions=0)
-    elif bucket == 'missing_parent':
-        rows = rows.filter(parent_id='')
-    elif bucket == 'review':
-        rows = rows.filter(parent_status__in=review_statuses)
+    elif bucket:
+        ids = [entry['item'].pk for entry in attention_rows if any(str(r.pk) == bucket for r in entry['rules'])]
+        rows = rows.filter(pk__in=ids)
     customer_filter, parent_filter = request.GET.get('customer', '')[:50], request.GET.get('parent', '')[:50]
-    if customer_filter and parent_filter:
-        rows = rows.filter(customer_id=customer_filter, parent_id=parent_filter)
+    if customer_filter:
+        rows = rows.filter(customer_id=customer_filter)
+    if parent_filter:
+        rows = rows.filter(parent_id=parent_filter)
+    opportunity = request.GET.get('opportunity', '')[:20]
+    if opportunity:
+        selected_rule = next((r for r in rules if str(r.pk) == opportunity and r.enabled and r.purpose == 'opportunity'), None)
+        ids = [case.pk for case, facts in facts_rows if selected_rule and matches(selected_rule, facts) is True]
+        rows = rows.filter(pk__in=ids)
     page = Paginator(rows.order_by('customer', 'parent_id', 'number'), options.page_size).get_page(request.GET.get('page'))
     for case in page:
-        case.review_reasons = reasons(case, options, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
+        case.review_reasons = [r.label for r in hit_map.get(case.pk, [])]
     groups = current_cases(request.user).exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
-    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action, 'missing_parent': missing_parent, 'parent_review': parent_review, 'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'parent_filter': parent_filter, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
+    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'parent_filter': parent_filter, 'opportunity': opportunity, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
 
 @operator_required
 def settings_page(request, module=False):
     module_key = 'projects' if module == 'projects' else 'planning'
     from projects.forms import ProjectForm
     obj = module_settings(module_key) if module else configuration()
+    if module:
+        from criteria.engine import ensure_rules
+        ensure_rules(obj)
     form_class = ProjectForm if module == 'projects' else ModuleForm if module else SystemForm
     kwargs = {'scope': obj.scope} if module else {}
     before = model_to_dict(obj)
@@ -129,8 +139,12 @@ def cancel_job(request, pk):
 def case_detail(request, pk):
     case = get_object_or_404(current_cases(request.user), pk=pk)
     snapshot = active_snapshot(request.user)
+    from criteria.engine import ensure_rules, planning_facts, matches
+    rules = ensure_rules(module_settings())
+    facts = planning_facts(current_cases(request.user).filter(pk=case.pk), request.user, bool(snapshot.coverage.get('notes')), timezone.localdate())[0][1]
+    case_reasons = [r.label for r in rules if r.purpose == 'attention' and matches(r, facts) is True]
     actions = case.local_actions.filter(actor=request.user).order_by('-created_at')
-    return render(request, 'crm/case.html', {'case': case, 'actions': actions, 'snapshot': snapshot, 'reasons': reasons(case, module_settings(), snapshot.coverage.get('notes'), timezone.localdate()), 'crm_mode': True, 'mode': 'crm-planning'})
+    return render(request, 'crm/case.html', {'case': case, 'actions': actions, 'snapshot': snapshot, 'reasons': case_reasons, 'crm_mode': True, 'mode': 'crm-planning'})
 
 @operator_required
 def create_action(request, pk):
@@ -186,6 +200,7 @@ def actions_page(request):
 def suggestions_page(request):
     from planning.group_recommendations import grouped_recommendations
     options = module_settings()
-    statuses = [s.strip() for s in options.parent_review_statuses.split(',') if s.strip()]
-    rows = grouped_recommendations(current_cases(request.user), request.user, timezone.localdate(), statuses)
+    from criteria.engine import ensure_rules
+    snapshot = active_snapshot(request.user)
+    rows = grouped_recommendations(current_cases(request.user), request.user, timezone.localdate(), ensure_rules(options), bool(snapshot and snapshot.coverage.get('notes')))
     return render(request, 'crm/group_recommendations.html', {'crm_mode': True, 'mode': 'planning-suggestions', 'page': Paginator(rows, 15).get_page(request.GET.get('page'))})

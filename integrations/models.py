@@ -49,6 +49,7 @@ class ModuleSettings(models.Model):
     parent_review_statuses = models.CharField(max_length=500, default='Canceled,Out of Planning,Done,Problem Solved')
     page_size = models.PositiveIntegerField(default=20)
     revision = models.PositiveIntegerField(default=1)
+    rules_initialized = models.BooleanField(default=False)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['module', 'scope'], name='unique_module_source')]
@@ -140,3 +141,25 @@ class ProjectSnapshot(models.Model):
     fetched_at = models.DateTimeField(default=timezone.now)
     records = models.JSONField(default=list)
     coverage = models.JSONField(default=dict)
+
+
+class EvaluationRule(models.Model):
+    settings = models.ForeignKey(ModuleSettings, on_delete=models.PROTECT, related_name='rules')
+    code = models.CharField(max_length=80)
+    label = models.CharField(max_length=200)
+    enabled = models.BooleanField(default=True)
+    purpose = models.CharField(max_length=20, default='attention')
+    metric = models.CharField(max_length=50)
+    operator = models.CharField(max_length=20)
+    value = models.JSONField(default=dict)
+    priority = models.PositiveIntegerField(default=3)
+    active_only = models.BooleanField(default=True)
+    closure_candidate = models.BooleanField(default=False)
+    grouping = models.CharField(max_length=30, default='customer_program')
+    min_count = models.PositiveIntegerField(default=2)
+    action_title = models.CharField(max_length=250, blank=True)
+    impact = models.CharField(max_length=600, blank=True)
+    revision = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['settings', 'code'], name='unique_module_rule')]

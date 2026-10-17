@@ -71,23 +71,23 @@ class ProjectTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class ProjectMetricsTests(SimpleTestCase):
+class ProjectMetricsTests(TestCase):
     def test_missing_notes_and_completed_project_not_overdue(self):
+        from criteria.engine import ensure_rules
         today = timezone.localdate()
+        options = module_settings('projects')
         base = {'id': str(uuid.uuid4()), 'status': 'Active', 'state': 0, 'planned_end': str(today-timedelta(days=3)), 'actual_end': None, 'manager': 'Manager', 'notes': []}
-        rows, _, _ = dashboard_data([base], False, 30, today)
-        self.assertTrue(rows[0]['overdue'])
-        self.assertFalse(rows[0]['stale'])
-        self.assertFalse(rows[0]['no_note'])
+        rows, _, counts = dashboard_data([base], False, options, today)
+        self.assertTrue(any(r.code == 'overdue' for r in rows[0]['attention_rules']))
+        self.assertFalse(any(r.code in ('stale', 'no_note') for r in rows[0]['attention_rules']))
         base['status'] = 'Completed'
-        rows, _, _ = dashboard_data([base], True, 30, today)
-        self.assertFalse(rows[0]['overdue'])
-        self.assertFalse(rows[0]['no_note'])
+        rows, _, _ = dashboard_data([base], True, options, today)
+        self.assertFalse(rows[0]['attention_rules'])
         base['status'] = 'Active'
         base['actual_end'] = str(today)
-        rows, _, _ = dashboard_data([base], True, 30, today)
-        self.assertTrue(rows[0]['overdue'])
-        self.assertTrue(rows[0]['no_note'])
+        rows, _, _ = dashboard_data([base], True, options, today)
+        self.assertTrue(any(r.code == 'overdue' for r in rows[0]['attention_rules']))
+        self.assertTrue(any(r.code == 'no_note' for r in rows[0]['attention_rules']))
 
     def test_note_matches_exact_project_and_deduplicates(self):
         identifier, other = str(uuid.uuid4()), str(uuid.uuid4())
@@ -104,7 +104,8 @@ class GroupSuggestionTests(TestCase):
         user = get_user_model().objects.create_user('group-test')
         for customer in ['a', 'a', 'b', '']:
             CRMCase.objects.create(scope='test', crm_id=uuid.uuid4(), customer_id=customer, customer='Same title', parent_id='p', parent_title='ارتقاء به نسخه', source_status='Done', evidence={'state': 0})
-        items = grouped_recommendations(CRMCase.objects.all(), user, timezone.localdate(), [])
+        from criteria.engine import ensure_rules
+        items = grouped_recommendations(CRMCase.objects.all(), user, timezone.localdate(), ensure_rules(module_settings()))
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]['count'], 2)
         self.assertEqual(items[0]['candidate'], 2)

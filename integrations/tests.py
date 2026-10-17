@@ -170,33 +170,3 @@ class TransportTests(SimpleTestCase):
         records = normalize(ROWS + ROWS, XML)
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]['parent_id'], '')
-
-
-class RecommendationTests(TestCase):
-    def test_priority_scope_and_actor_isolation(self):
-        from datetime import timedelta
-        from planning.recommendations import recommendations
-        user = get_user_model().objects.create_user('suggestion-owner')
-        other = get_user_model().objects.create_user('suggestion-other')
-        today = timezone.localdate()
-        cases = [CRMCase.objects.create(scope='test', crm_id=uuid.uuid4(), number=str(i), parent_id='parent') for i in range(4)]
-        def action(case, actor, days, **extra):
-            return CaseAction.objects.create(case=case, actor=actor, title='synthetic', responsible='test', due_date=today + timedelta(days=days), request_key=uuid.uuid4(), **extra)
-        action(cases[0], user, -2)
-        action(cases[1], user, 1, blocker='synthetic blocker')
-        action(cases[2], other, -20)
-        action(cases[3], user, -30)
-        rows = recommendations(CRMCase.objects.filter(pk__in=[c.pk for c in cases[:3]]), user, [], today)
-        self.assertEqual([r['priority'] for r in rows], [1, 2, 5])
-        self.assertEqual([r['case'].pk for r in rows], [c.pk for c in cases[:3]])
-        self.assertTrue(all(r['reason'] and r['impact'] for r in rows))
-
-    def test_empty_and_completed_actions(self):
-        from planning.recommendations import recommendations
-        user = get_user_model().objects.create_user('empty-owner')
-        today = timezone.localdate()
-        self.assertEqual(recommendations(CRMCase.objects.none(), user, [], today), [])
-        case = CRMCase.objects.create(scope='test', crm_id=uuid.uuid4(), parent_id='p')
-        CaseAction.objects.create(case=case, actor=user, title='synthetic', responsible='test', due_date=today, status='done', blocker='old blocker', request_key=uuid.uuid4())
-        rows = recommendations(CRMCase.objects.all(), user, [], today)
-        self.assertEqual(rows[0]['priority'], 5)

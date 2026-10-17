@@ -30,7 +30,7 @@ class SystemForm(ConfirmedForm):
 class ModuleForm(ConfirmedForm):
     class Meta:
         model = ModuleSettings
-        fields = ['case_view', 'note_view', 'activity_view', 'stale_days', 'parent_review_statuses', 'page_size']
+        fields = ['case_view', 'note_view', 'activity_view', 'page_size']
         labels = {'case_view': 'View اصلی کیس‌های برنامه‌ریزی', 'note_view': 'View شواهد یادداشت؛ اختیاری', 'activity_view': 'View فعالیت‌ها؛ اختیاری', 'stale_days': 'آستانه قدمت یادداشت (روز)', 'parent_review_statuses': 'وضعیت‌های برنامه مرتبط برای بازبینی', 'page_size': 'تعداد ردیف در صفحه'}
         help_texts = {'case_view': 'فقط Viewهای موجودیت Case؛ فیلترهای خود View حفظ می‌شوند. تا تغییر صریح، انتخاب ثابت است.', 'note_view': 'فقط یادداشت‌های این View و مرتبط با کیس‌ها یا برنامه مادر تحلیل می‌شوند؛ پوشش کامل تضمین نمی‌شود.', 'activity_view': 'فعالیت‌های همین View برای شواهد موعد و اقدام استفاده می‌شوند؛ چیزی خارج از View خوانده نمی‌شود.', 'stale_days': 'قدمت یادداشت صرفاً علامت بازبینی است، نه نبود کار. بین ۱ تا ۳۶۵ روز.', 'parent_review_statuses': 'برچسب دقیق وضعیت‌ها با ویرگول جدا شود. تطبیق فقط با داده برنامه مرتبط موجود در View انجام می‌شود.', 'page_size': 'بین ۱۰ تا ۱۰۰؛ روی دریافت CRM اثری ندارد.'}
 
@@ -45,7 +45,7 @@ class ModuleForm(ConfirmedForm):
     def clean(self):
         data = super().clean()
         for key, lower, upper in [('stale_days', 1, 365), ('page_size', 10, 100)]:
-            if not lower <= data.get(key, 0) <= upper:
+            if key in self.fields and not lower <= data.get(key, 0) <= upper:
                 self.add_error(key, f'عدد بین {lower} تا {upper} وارد کنید.')
         return data
 

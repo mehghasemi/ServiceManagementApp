@@ -1,41 +1,36 @@
+"""Shared-action opportunities driven only by saved criteria and exact CRM IDs."""
 from collections import defaultdict
-from django.db.models import Prefetch
-from integrations.models import CaseAction
+from criteria.engine import planning_facts, matches
 
 
-def grouped_recommendations(cases, user, today, review_statuses):
-    groups = defaultdict(list)
-    actions = CaseAction.objects.filter(actor=user, status='open')
-    for case in cases.prefetch_related(Prefetch('local_actions', queryset=actions, to_attr='group_actions')):
-        # Unknown customers/programs must never become an invented shared project.
-        if case.customer_id and case.parent_id:
-            groups[(case.customer_id, case.parent_id)].append(case)
-    result = []
-    for (customer_id, parent_id), members in groups.items():
-        first = members[0]
-        overdue = sum(any(a.due_date < today for a in c.group_actions) for c in members)
-        blocked = sum(any(a.blocker.strip() for a in c.group_actions) for c in members)
-        review = sum(c.parent_status in review_statuses for c in members)
-        candidate = sum(c.source_status.casefold() == 'done' and c.evidence.get('state') == 0 for c in members)
-        upgrade = any(word in first.parent_title for word in ('ارتقا', 'ارتقاء', 'بروزرسانی', 'به‌روزرسانی'))
-        if overdue:
-            priority, title = 1, 'بازبینی تعهدهای مشترک و هماهنگی یک برنامه جبرانی'
-            reason = f'{overdue} کیس دارای اقدام محلی با موعد گذشته در همین مشتری و برنامه است.'
-        elif blocked:
-            priority, title = 2, 'بررسی موانع مشترک در جلسه هماهنگی مشتری'
-            reason = f'برای {blocked} کیس مانع ثبت شده؛ مشترک‌بودن علت باید در جلسه بررسی شود.'
-        elif review:
-            priority, title = 3, 'تطبیق جمعی وضعیت برنامه و کیس‌های مرتبط'
-            reason = f'{review} کیس به برنامه‌ای با وضعیت نیازمند بازبینی متصل است.'
-        elif len(members) > 1:
-            priority = 4
-            title = 'بررسی امکان ارتقای هماهنگ مرکز' if upgrade else 'تدوین برنامه اقدام مشترک برای این مرکز'
-            reason = f'{len(members)} کیس به یک مشتری و یک برنامه CRM مشترک متصل‌اند.'
-        else:
-            continue
-        result.append({'priority': priority, 'title': title, 'reason': reason,
-            'customer': first.customer or 'عنوان مشتری موجود نیست', 'program': first.parent_title,
-            'customer_id': customer_id, 'parent_id': parent_id, 'count': len(members), 'candidate': candidate,
-            'impact': f'امکان هماهنگ‌کردن پیگیری {len(members)} کیس در یک برنامه اجرایی؛ کاهش پیگیری‌های پراکنده.',
-            'condition': 'بسته‌شدن کیس‌ها وابسته به رفع در نسخه هدف، اجرای موفق و تأیید نتیجه مشتری است. تعداد قابل بستن از داده فعلی قابل تعیین نیست.'})
-    return sorted(result, key=lambda r: (r['priority'], -r['count'], r['customer_id'], r['parent_id']))
+def grouped_recommendations(cases, user, today, rules, notes_loaded=False):
+    records = planning_facts(cases, user, notes_loaded, today)
+    opportunities = [r for r in rules if r.enabled and r.purpose == 'opportunity']
+    closure_rules = [r for r in rules if r.enabled and r.closure_candidate and r.purpose == 'attention']
+    result, seen = [], set()
+    for rule in sorted(opportunities, key=lambda r: (r.priority, r.pk)):
+        groups = defaultdict(list)
+        for case, facts in records:
+            if not case.customer_id or matches(rule, facts) is not True:
+                continue
+            if rule.grouping == 'customer_program' and not case.parent_id:
+                continue
+            key = (case.customer_id, case.parent_id if rule.grouping == 'customer_program' else '')
+            groups[key].append((case, facts))
+        for (customer_id, parent_id), members in groups.items():
+            if len(members) < rule.min_count:
+                continue
+            signature = tuple(sorted(case.pk for case, _ in members))
+            if signature in seen:
+                continue
+            seen.add(signature)
+            first = members[0][0]
+            candidate = sum(any(matches(r, facts) is True for r in closure_rules) for _, facts in members)
+            result.append({'priority': rule.priority, 'title': rule.action_title or rule.label,
+                'rule': rule, 'customer': first.customer or 'نام مشتری موجود نیست',
+                'program': first.parent_title if parent_id else 'مراجعه یا هماهنگی در سطح مرکز',
+                'customer_id': customer_id, 'parent_id': parent_id, 'count': len(members), 'candidate': candidate,
+                'reason': f'{len(members)} کیس در یک گروه معتبر با معیار «{rule.label}» منطبق است.',
+                'impact': rule.impact,
+                'condition': 'تعداد قطعی قابل بستن از داده فعلی قابل تعیین نیست؛ رفع در نسخه هدف یا نتیجه مراجعه و تأیید هر کیس باید بررسی شود.'})
+    return sorted(result, key=lambda r: (r['priority'], -r['count'], -r['candidate'], r['customer_id'], r['parent_id']))

@@ -42,19 +42,3 @@ def normalize(rows, xml, notes=None, activities=None):
             'evidence': {'created_on': row.get('createdon'), 'modified_on': row.get('modifiedon'), 'planning_started': row.get('brd_startplanningdate'), 'owner': label(row, '_ownerid_value'), 'state': row.get('statecode'), 'notes': case_notes, 'activities': activities_by_case.get(identifier, []), 'parent_notes': notes_by_case.get(parent, []), 'parent_activities': activities_by_case.get(parent, [])},
         }
     return list(result.values())
-
-def reasons(case, options, notes_loaded, today):
-    from django.utils.dateparse import parse_datetime
-    items = []
-    if not case.parent_id:
-        items.append('برنامه مرتبط در داده دریافتی مشخص نیست')
-    elif case.parent_status in [s.strip() for s in options.parent_review_statuses.split(',') if s.strip()]:
-        items.append('وضعیت برنامه مرتبط نیازمند تطبیق است؛ خطا قطعی نیست')
-    if case.source_status.casefold() == 'done' and case.evidence.get('state') == 0:
-        items.append('رفع در نسخه / تأیید نتیجه مشتری نیازمند بررسی است')
-    notes = case.evidence.get('notes', [])
-    if notes_loaded and notes:
-        stamp = parse_datetime(notes[0]['date'])
-        if stamp and (today - stamp.date()).days > options.stale_days:
-            items.append('آخرین یادداشت در View انتخابی قدیمی است؛ دلیل نبود کار نیست')
-    return items
