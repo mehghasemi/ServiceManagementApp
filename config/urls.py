@@ -3,8 +3,10 @@ from django.contrib.staticfiles.views import serve
 from planning import views
 from integrations import views as crm
 from config.views import home
+from config.accounts import users
 
 urlpatterns = [
+    path('network-users/', users, name='network-users'),
     path('', home, name='home'),
     path('projects/', include('projects.urls')),
     path('planning/', include('planning.urls')),

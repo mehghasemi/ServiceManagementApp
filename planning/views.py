@@ -15,6 +15,9 @@ from .models import Program
 from .services import allowed, save_program, record_followup, Conflict
 
 def welcome(request):
+    if settings.SERVICE_LAN:
+        from config.accounts import network_login
+        return network_login(request)
     if request.method == 'POST':
         user = get_object_or_404(get_user_model(), username='local-preview', is_active=True)
         login(request, user, backend='django.contrib.auth.backends.ModelBackend')

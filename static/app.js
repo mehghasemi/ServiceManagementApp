@@ -13,7 +13,7 @@ themeButton?.addEventListener('click', () => {
   refreshThemeButton();
 });
 document.querySelectorAll('table').forEach(table => {
-  const labels = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+  const labels = Array.from(table.querySelectorAll('thead th')).map(th => (th.childNodes.length ? Array.from(th.childNodes).filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('') : th.textContent).trim());
   table.classList.add('responsive-table');
   table.querySelectorAll('tbody tr').forEach(row => {
     Array.from(row.cells).forEach((cell, index) => {
@@ -90,3 +90,19 @@ sidebarToggle?.addEventListener('click', () => {
   refreshSidebar();
   try { localStorage.setItem('service-sidebar', sidebarClosed ? 'closed' : 'open'); } catch (_) {}
 });
+
+const controlTip = document.createElement('div');
+controlTip.className = 'control-tooltip'; controlTip.hidden = true; controlTip.setAttribute('aria-hidden', 'true');
+document.body.append(controlTip);
+document.querySelectorAll('[data-tooltip]').forEach(control => {
+  const show = () => {
+    controlTip.textContent = control.dataset.tooltip; controlTip.hidden = false;
+    const r = control.getBoundingClientRect();
+    controlTip.style.left = `${Math.max(8, Math.min(r.left, innerWidth-controlTip.offsetWidth-8))}px`;
+    controlTip.style.top = `${r.bottom+controlTip.offsetHeight+12 < innerHeight ? r.bottom+6 : Math.max(8,r.top-controlTip.offsetHeight-6)}px`;
+  };
+  control.addEventListener('mouseenter', show); control.addEventListener('focus', show);
+  ['mouseleave','blur','click'].forEach(event => control.addEventListener(event, () => { controlTip.hidden = true; }));
+});
+document.addEventListener('keydown', event => { if(event.key === 'Escape') controlTip.hidden = true; });
+window.addEventListener('scroll', () => { controlTip.hidden = true; }, true);

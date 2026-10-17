@@ -1,5 +1,6 @@
 """Bounded declarative comparisons. No eval, code execution or guessed evidence."""
 from django.db import transaction
+from config.access import shared_queryset
 from django.db.models import Prefetch
 from integrations.models import EvaluationRule, ModuleSettings, CaseAction
 from projects.services import day
@@ -87,7 +88,7 @@ def note_facts(notes, loaded, today):
 
 
 def planning_facts(cases, user, loaded, today):
-    actions = CaseAction.objects.filter(actor=user, status='open')
+    actions = shared_queryset(CaseAction.objects.filter(status='open'), user, 'actor')
     rows = cases.prefetch_related(Prefetch('local_actions', queryset=actions, to_attr='rule_actions'))
     result = []
     for case in rows:

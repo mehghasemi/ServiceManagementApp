@@ -1,0 +1,1 @@
+{% load service_ui %}<div class="case-timing"><span>{% if active %}باز از ایجاد{% else %}از ایجاد{% endif %}: <strong>{{ created|elapsed }}</strong></span><span>آخرین یادداشت: <strong>{% if not loaded %}دریافت نشده{% elif not has_notes %}در View نیست{% elif last_note %}{{ last_note|elapsed }}{% else %}تاریخ نامشخص{% endif %}</strong></span></div>

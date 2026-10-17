@@ -105,9 +105,10 @@ def attention(request, module):
     rows, counts, records, rules = evaluations(request.user, module)
     selected = request.GET.get('rule', '')
     total = len(rows)
+    snapshot = active_snapshot(request.user) if module == 'planning' else None
     if selected:
         rows = [r for r in rows if any(str(rule.pk) == selected for rule in r['rules'])]
     for entry in rows:
         for rule in entry['rules']:
             rule.condition_text = rule_description(rule, module)
-    return render(request, 'criteria/attention.html', {**context(module, 'attention'), 'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'counts': counts, 'selected': selected, 'total': total, 'source_count': len(records)})
+    return render(request, 'criteria/attention.html', {**context(module, 'attention'), 'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'counts': counts, 'selected': selected, 'total': total, 'source_count': len(records), 'notes_loaded': bool(snapshot and snapshot.coverage.get('notes'))})
