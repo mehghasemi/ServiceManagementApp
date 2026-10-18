@@ -27,6 +27,7 @@ let helpTrigger;
 document.querySelectorAll('[data-help]').forEach(button => {
   button.addEventListener('click', () => {
     helpTrigger = button;
+    document.querySelector('#help-title').textContent = button.getAttribute('aria-label') || 'راهنمای این بخش';
     document.querySelector('#help-content').textContent = button.dataset.help;
     helpDialog.showModal();
   });
@@ -106,3 +107,9 @@ document.querySelectorAll('[data-tooltip]').forEach(control => {
 });
 document.addEventListener('keydown', event => { if(event.key === 'Escape') controlTip.hidden = true; });
 window.addEventListener('scroll', () => { controlTip.hidden = true; }, true);
+
+document.querySelectorAll('[data-refresh-time]').forEach(el => {
+  const stamp = new Date(el.dataset.refreshTime);
+  el.dataset.tooltip = Number.isNaN(stamp.valueOf()) ? 'زمان دریافت این مورد ثبت نشده؛ پس از به‌روزرسانی نمایش داده می‌شود.' : 'آخرین دریافت موفق این مورد: ' + new Intl.DateTimeFormat('fa-IR', {dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Tehran'}).format(stamp);
+  el.setAttribute('aria-label', el.dataset.tooltip);
+});

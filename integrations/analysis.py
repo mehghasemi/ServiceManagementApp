@@ -30,15 +30,17 @@ def normalize(rows, xml, notes=None, activities=None):
             raise ValueError('View کیس، شناسه معتبر incidentid برنگرداند؛ دریافت ناقص پذیرفته نشد.')
         parent = guid(row.get('_brd_plannedcase_value') or row.get('brd_plannedcase'))
         parent_status, parent_title = '', label(row, '_brd_plannedcase_value')
+        parent_details = {}
         for alias in parent_aliases:
             parent_status = label(row, alias + '.statuscode') or parent_status
             parent_title = label(row, alias + '.title') or parent_title
+            parent_details.update({'type': label(row, alias + '.brd_incidenttype'), 'planned_start': row.get(alias + '.brd_plannedstartdate'), 'planned_end': row.get(alias + '.brd_plannedenddate')})
         customer_key = '_brd_account_value' if row.get('_brd_account_value') else '_customerid_value'
         case_notes = sorted(notes_by_case.get(identifier, []), key=lambda n: n['date'], reverse=True)
         result[identifier] = {
             'crm_id': identifier, 'number': str(row.get('ticketnumber') or ''), 'title': row.get('title') or '',
             'customer_id': guid(row.get(customer_key)), 'customer': label(row, customer_key),
             'source_status': label(row, 'statuscode'), 'parent_id': parent, 'parent_title': parent_title, 'parent_status': parent_status,
-            'evidence': {'created_on': row.get('createdon'), 'modified_on': row.get('modifiedon'), 'planning_started': row.get('brd_startplanningdate'), 'owner': label(row, '_ownerid_value'), 'state': row.get('statecode'), 'notes': case_notes, 'activities': activities_by_case.get(identifier, []), 'parent_notes': notes_by_case.get(parent, []), 'parent_activities': activities_by_case.get(parent, [])},
+            'evidence': {'automation_version': label(row, 'sma_upgrade_' + ('brd_account' if customer_key == '_brd_account_value' else 'customerid') + '.brd_automationversion'), 'incident_type': label(row, 'brd_incidenttype'), 'incident_type_code': row.get('brd_incidenttype'), 'case_category': label(row, 'casetypecode'), 'parent_details': parent_details, 'created_on': row.get('createdon'), 'modified_on': row.get('modifiedon'), 'planning_started': row.get('brd_startplanningdate'), 'owner': label(row, '_ownerid_value'), 'state': row.get('statecode'), 'notes': case_notes, 'activities': activities_by_case.get(identifier, []), 'parent_notes': notes_by_case.get(parent, []), 'parent_activities': activities_by_case.get(parent, [])},
         }
     return list(result.values())

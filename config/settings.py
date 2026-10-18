@@ -21,7 +21,7 @@ MIDDLEWARE = ['django.middleware.security.SecurityMiddleware', 'planning.middlew
 ROOT_URLCONF = 'config.urls'
 TEMPLATES = [{'BACKEND': 'django.template.backends.django.DjangoTemplates', 'DIRS': [BASE_DIR / 'templates'], 'APP_DIRS': True, 'OPTIONS': {'context_processors': ['django.template.context_processors.request', 'django.contrib.auth.context_processors.auth', 'django.contrib.messages.context_processors.messages', 'planning.context.common']}}]
 # Isolated local prototype only. Production PostgreSQL deployment is a later phase.
-DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': BASE_DIR / 'private' / 'preview.sqlite3', 'OPTIONS': {'timeout': 10}}}
+DATABASES = {'default': {'ENGINE': 'django.db.backends.sqlite3', 'NAME': Path(os.environ.get('SERVICE_DATABASE_PATH', str(BASE_DIR / 'private' / 'preview.sqlite3'))).resolve(), 'OPTIONS': {'timeout': 10}}}
 LANGUAGE_CODE = 'fa-ir'
 TIME_ZONE = 'Asia/Tehran'
 USE_TZ = True
@@ -34,3 +34,12 @@ SESSION_COOKIE_SAMESITE = 'Strict'
 CSRF_COOKIE_SAMESITE = 'Strict'
 X_FRAME_OPTIONS = 'DENY'
 SECURE_CONTENT_TYPE_NOSNIFF = True
+
+SERVICE_ENVIRONMENT = os.environ.get('SERVICE_ENVIRONMENT', 'legacy')
+if SERVICE_ENVIRONMENT == 'development':
+    SESSION_COOKIE_NAME = 'service_dev_session'
+    CSRF_COOKIE_NAME = 'service_dev_csrf'
+
+if SERVICE_ENVIRONMENT == 'stable':
+    SESSION_COOKIE_NAME = 'service_stable_lan_session' if SERVICE_LAN else 'service_stable_session'
+    CSRF_COOKIE_NAME = 'service_stable_lan_csrf' if SERVICE_LAN else 'service_stable_csrf'

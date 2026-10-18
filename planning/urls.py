@@ -2,8 +2,11 @@
 from django.urls import path
 from criteria import views as criteria_views
 from integrations import views
+from . import upgrade_views
 
 urlpatterns = [
+    path('upgrades/', upgrade_views.dashboard, name='planning-upgrades'),
+    path('cases/<int:identifier>/refresh/', views.refresh_record, {'module': 'planning'}, name='case-refresh'),
     path('attention/', criteria_views.attention, {'module': 'planning'}, name='planning-attention'),
     path('criteria/', criteria_views.settings, {'module': 'planning'}, name='planning-criteria'),
     path('criteria/new/', criteria_views.edit, {'module': 'planning'}, name='planning-rule-new'),

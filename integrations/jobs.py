@@ -18,10 +18,10 @@ def module_settings(module="planning"):
 def selection_key(options):
     return str(options.case_view_id or '') + ':' + str(options.note_view_id or '') + ':' + str(options.activity_view_id or '')
 
-def start_job(owner, kind, launch=True, module="planning"):
+def start_job(owner, kind, launch=True, module="planning", target=None):
     if module not in ('planning', 'projects'):
         raise CRMError('ماژول معتبر نیست.')
-    if kind not in ('test', 'catalog', 'sync'):
+    if kind not in ('test', 'catalog', 'sync', 'row'):
         raise CRMError('نوع عملیات معتبر نیست.')
     with transaction.atomic():
         system = SystemSettings.objects.select_for_update().get(pk=configuration().pk)
@@ -34,8 +34,11 @@ def start_job(owner, kind, launch=True, module="planning"):
             view = getattr(options, name)
             if view:
                 config['views'][name] = {'crm_id': str(view.crm_id), 'kind': view.kind, 'entity': view.entity, 'name': view.name}
-        if kind == 'sync' and 'case_view' not in config['views']:
+        if kind in ('sync', 'row') and 'case_view' not in config['views']:
             raise CRMError('ابتدا View اصلی را در تنظیمات ماژول انتخاب و ذخیره کنید.')
+        if kind == 'row':
+            from .row_refresh import row_context
+            config.update(row_context(owner, module, target))
         try:
             job = SyncJob.objects.create(owner=owner, kind=kind, scope=system.scope, config=config)
         except IntegrityError as error:
@@ -66,6 +69,10 @@ def run_job(pk):
             with transaction.atomic():
                 for row in catalog:
                     CRMView.objects.update_or_create(scope=job.scope, kind=row['kind'], crm_id=row['crm_id'], defaults={'name': row['name'], 'entity': row['entity'], 'refreshed_at': timezone.now()})
+        elif job.kind == 'row':
+            from .row_refresh import refresh_row
+            refresh_row(job, client, checkpoint)
+            return
         elif job.config.get('module') == 'projects':
             from projects.services import publish_snapshot
             publish_snapshot(job, client, checkpoint)
@@ -73,7 +80,14 @@ def run_job(pk):
         else:
             views = job.config['views']
             rows, xml, name = client.fetch_view(views['case_view'])
-            notes = client.fetch_view(views['note_view'])[0] if 'note_view' in views else None
+            notes = None
+            if 'note_view' in views:
+                case_records = normalize(rows, xml)
+                targets = sorted({identifier for record in case_records for identifier in (record['crm_id'], record['parent_id']) if identifier})
+                notes = []
+                for offset in range(0, len(targets), 100):
+                    checkpoint('دریافت یادداشت‌های کیس‌ها و برنامه‌های مرتبط', offset)
+                    notes.extend(client.fetch_view(views['note_view'], related_ids=targets[offset:offset + 100])[0])
             activities = client.fetch_view(views['activity_view'])[0] if 'activity_view' in views else None
             records = normalize(rows, xml, notes, activities)
             checkpoint('آماده ذخیره دریافت کامل', len(records))

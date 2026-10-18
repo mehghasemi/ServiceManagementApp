@@ -37,6 +37,25 @@ class ProjectTests(TestCase):
         job.refresh_from_db()
         return job
 
+    def test_row_refresh_changes_only_selected_project(self):
+        self.receive()
+        snapshot=ProjectSnapshot.objects.get()
+        sibling=dict(snapshot.records[0], id=str(uuid.uuid4()), title='دیگری')
+        snapshot.records.append(sibling); snapshot.save()
+        old_stamp=snapshot.fetched_at
+        job=start_job(self.user, 'row', module='projects', target=self.identifier, launch=False)
+        def fetch(view, related_ids=None):
+            self.assertEqual(related_ids,[self.identifier])
+            return ([{'brd_projectid':self.identifier,'brd_name':'تازه','statecode':0}] if view['entity']=='brd_project' else [], '', '')
+        with patch('integrations.jobs.Client.fetch_view',side_effect=fetch):
+            run_job(job.pk)
+        job.refresh_from_db();snapshot.refresh_from_db()
+        self.assertEqual(job.status,'success')
+        self.assertEqual(snapshot.records[0]['title'],'تازه')
+        self.assertIn('refreshed_at',snapshot.records[0])
+        self.assertEqual(snapshot.records[1],sibling)
+        self.assertEqual(snapshot.fetched_at,old_stamp)
+
     def test_project_publish_failure_and_planning_isolation(self):
         planning = module_settings()
         self.assertEqual(self.receive().status, 'success')

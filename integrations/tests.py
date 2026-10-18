@@ -30,6 +30,58 @@ class IntegrationTests(TestCase):
         job.refresh_from_db()
         return job
 
+    def test_notes_are_scoped_and_parent_notes_stay_separate(self):
+        parent = '33333333-3333-3333-3333-333333333333'
+        self.options.note_view = CRMView.objects.create(scope=self.config.scope, kind='savedqueries', crm_id=uuid.uuid4(), name='یادداشت ساختگی', entity='annotation')
+        self.options.save()
+        def fetch(view, related_ids=None):
+            if view['entity'] == 'incident':
+                return [dict(ROWS[0], _brd_plannedcase_value=parent)], XML, 'ویوی تست'
+            self.assertEqual(set(related_ids), {CASE_ID, parent})
+            return [{'annotationid': str(uuid.uuid4()), '_objectid_value': CASE_ID, 'subject': 'یادداشت کیس'}, {'annotationid': str(uuid.uuid4()), '_objectid_value': parent, 'subject': 'یادداشت برنامه'}], '', 'یادداشت'
+        job = start_job(self.user, 'sync', launch=False)
+        with patch('integrations.jobs.Client.fetch_view', side_effect=fetch):
+            run_job(job.pk)
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'success')
+        case = CRMCase.objects.get()
+        self.assertEqual(case.evidence['notes'][0]['title'], 'یادداشت کیس')
+        self.assertEqual(case.evidence['parent_notes'][0]['title'], 'یادداشت برنامه')
+        self.assertTrue(PlanningSnapshot.objects.get().coverage['notes'])
+
+    def test_single_row_refresh_preserves_membership_and_actions(self):
+        from .views import active_snapshot
+        self.sync()
+        case = CRMCase.objects.get()
+        original_snapshot = active_snapshot(self.user)
+        action = CaseAction.objects.create(case=case, actor=self.user, title='محلی', responsible='نمونه', due_date=timezone.localdate(), request_key=uuid.uuid4())
+        job = start_job(self.user, 'row', launch=False, target=case.pk)
+        def fetch(view, related_ids=None):
+            self.assertEqual(related_ids, [CASE_ID])
+            return [dict(ROWS[0], title='به‌روز')], XML, 'ویوی تست'
+        with patch('integrations.jobs.Client.fetch_view', side_effect=fetch):
+            run_job(job.pk)
+        job.refresh_from_db(); case.refresh_from_db(); action.refresh_from_db()
+        self.assertEqual(job.status, 'success')
+        self.assertEqual(case.title, 'به‌روز')
+        self.assertEqual(action.title, 'محلی')
+        self.assertEqual(active_snapshot(self.user).pk, original_snapshot.pk)
+        self.assertGreater(case.fetched_at, original_snapshot.fetched_at)
+
+    def test_single_row_absent_from_view_preserves_old_data(self):
+        self.sync(); case = CRMCase.objects.get(); stamp = case.fetched_at
+        job = start_job(self.user, 'row', launch=False, target=case.pk)
+        with patch('integrations.jobs.Client.fetch_view', return_value=([], XML, 'ویوی تست')):
+            run_job(job.pk)
+        job.refresh_from_db(); case.refresh_from_db()
+        self.assertEqual(job.status, 'failed')
+        self.assertEqual(case.fetched_at, stamp)
+
+    def test_row_endpoint_rejects_outside_view_and_get(self):
+        self.sync(); case = CRMCase.objects.get()
+        self.assertEqual(self.client.get(f'/planning/cases/{case.pk}/refresh/').status_code, 405)
+        self.assertEqual(self.client.post('/planning/cases/999999/refresh/').status_code, 404)
+
     def test_full_sync_preserves_local_actions_and_is_unique(self):
         self.assertEqual(self.sync().status, 'success')
         case = CRMCase.objects.get()

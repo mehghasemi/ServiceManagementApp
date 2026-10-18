@@ -12,3 +12,5 @@
 - CRM is read-only in the first release. Local planning decisions must survive synchronization.
 - Business evaluation rules must use the shared saved criteria mechanism: user-selectable activation, conditions, thresholds, priority and grouping. Do not add hardcoded business classifications; preserve source-identity and security invariants. See docs/criteria.md.
 - Local preview and read-only CRM View integration are implemented. Read docs/crm-planning.md for current scope and docs/preview.md for the earlier synthetic prototype. Authenticated limited LAN pilot is implemented in run_lan.py; see docs/network.md. Never expose passwordless run_preview.py to the LAN. Team scoping, PostgreSQL and HTTPS remain pending. CRM records and local actions stay under ignored private/.
+
+- Develop using runtime.py development (isolated DB/port). Never edit private/releases or stop the user's stable server for development. Preparing a release does not activate it; see docs/development-runtime.md.

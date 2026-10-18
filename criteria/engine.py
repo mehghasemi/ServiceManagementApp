@@ -8,6 +8,10 @@ from projects.services import day
 # These are available source facts, not business thresholds. Rules live in the DB.
 METRICS = {
     'planning': {
+        'fix_newer': ('نگارش رفع کیس جدیدتر از نگارش فعلی مشتری است', 'bool'),
+        'incident_type': ('نوع رکورد؛ Issue یا Backlog', 'text'),
+        'case_category': ('دسته درخواست؛ مانند باگ یا قابلیت جدید', 'text'),
+        'parent_type': ('نوع برنامه مرتبط', 'text'),
         'has_parent': ('رابطه برنامه موجود است', 'bool'),
         'parent_status': ('وضعیت برنامه مرتبط', 'text'),
         'source_status': ('وضعیت کیس', 'text'),
@@ -93,7 +97,7 @@ def planning_facts(cases, user, loaded, today):
     result = []
     for case in rows:
         state = case.evidence.get('state')
-        facts = {'active': state == 0 if state is not None else None,
+        facts = {'fix_newer': None, 'incident_type': case.evidence.get('incident_type') or None, 'case_category': case.evidence.get('case_category') or None, 'parent_type': case.evidence.get('parent_details', {}).get('type') or None, 'active': state == 0 if state is not None else None,
                  'has_parent': bool(case.parent_id), 'parent_status': case.parent_status or None,
                  'source_status': case.source_status or None, 'parent_title': case.parent_title or None,
                  'title': case.title or None, 'open_count': len(case.rule_actions),

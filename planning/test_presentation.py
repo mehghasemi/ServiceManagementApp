@@ -30,3 +30,14 @@ class PresentationTests(SimpleTestCase):
         self.assertIn('«7»',text); self.assertIn('حداقل 4 کیس',text);self.assertIn('کاهش دوباره‌کاری',text)
         rule.value=19
         self.assertIn('«19»',explain_rule(rule))
+
+    def test_done_help_does_not_survive_changed_status_selection(self):
+        rule=SimpleNamespace(settings=SimpleNamespace(module='planning'), metric='source_status', value=['Done'], operator='in', active_only=True, purpose='attention', closure_candidate=True)
+        text=explain_rule(rule)
+        self.assertIn('محیط مشتری',text)
+        self.assertIn('چه کاری انجام دهید؟',text)
+        rule.value=['Waiting for Customer']
+        text=explain_rule(rule)
+        self.assertNotIn('روی Done',text)
+        self.assertNotIn('نصب نسخه',text)
+        self.assertIn('Waiting for Customer',text)

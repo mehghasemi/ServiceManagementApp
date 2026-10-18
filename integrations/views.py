@@ -1,3 +1,5 @@
+from config.sorting import sort_rows
+from config.pagination import display_page_size
 from functools import wraps
 from django.conf import settings
 from config.access import shared_queryset, open_actions_filter, member
@@ -35,7 +37,7 @@ def active_snapshot(user):
     snapshot = shared_queryset(PlanningSnapshot.objects.all(), user).filter(scope=config.scope, selection_key=selection_key(options)).order_by('-fetched_at').first()
     # Case identity is stable across Views, but a historical View must never show
     # newer evidence silently written through a different selection.
-    if snapshot and snapshot.cases.filter(fetched_at__gt=snapshot.fetched_at).exists():
+    if snapshot and snapshot.cases.filter(fetched_at__gt=snapshot.fetched_at).filter(Q(evidence__refresh_selection_key__isnull=True) | ~Q(evidence__refresh_selection_key=snapshot.selection_key)).exists():
         return None
     return snapshot
 
@@ -50,6 +52,13 @@ def dashboard(request):
     last_job = shared_queryset(SyncJob.objects.all(), request.user).filter(scope=config.scope).filter(Q(config__module='planning') | ~Q(config__has_key='module')).order_by('-created_at').first()
     rows = current_cases(request.user).annotate(open_actions=Count('local_actions', filter=open_actions_filter(request.user)))
     total = rows.count()
+    type_counts = list(current_cases(request.user).values('evidence__incident_type').annotate(count=Count('pk')).order_by('-count'))
+    type_filter = request.GET.get('record_type', '')[:100]
+    linked_programs = current_cases(request.user).exclude(parent_id='').values('parent_id').distinct().count()
+    unlinked_count = current_cases(request.user).filter(parent_id='').count()
+    parent_link = request.GET.get('parent_link', '')
+    status_filter = request.GET.get('status', '')[:100]
+    source_statuses = list(current_cases(request.user).values_list('source_status', flat=True).distinct().order_by('source_status'))
     without_action = rows.filter(open_actions=0).count()
     from criteria.engine import ensure_rules, planning_facts, evaluate_records, matches
     rules = ensure_rules(options)
@@ -61,6 +70,12 @@ def dashboard(request):
     action_coverage = round((total - without_action) * 100 / total, 1) if total else None
     query = request.GET.get('q', '').strip()[:100]
     bucket = request.GET.get('bucket', '')
+    if parent_link == 'missing':
+        rows = rows.filter(parent_id='')
+    if status_filter:
+        rows = rows.filter(source_status=status_filter)
+    if type_filter:
+        rows = rows.filter(evidence__incident_type=type_filter)
     if query:
         rows = rows.filter(Q(title__icontains=query) | Q(number__icontains=query) | Q(customer__icontains=query))
     if bucket == 'without_action':
@@ -78,11 +93,12 @@ def dashboard(request):
         selected_rule = next((r for r in rules if str(r.pk) == opportunity and r.enabled and r.purpose == 'opportunity'), None)
         ids = [case.pk for case, facts in facts_rows if selected_rule and matches(selected_rule, facts) is True]
         rows = rows.filter(pk__in=ids)
-    page = Paginator(rows.order_by('customer', 'parent_id', 'number'), options.page_size).get_page(request.GET.get('page'))
+    rows = sort_rows(request, rows.order_by('customer', 'parent_id', 'number', 'pk'), {'case':'number','customer':'customer','status':'source_status','parent':'parent_title','created':'evidence.created_on','actions':'open_actions'})
+    page = Paginator(rows, display_page_size(request, options.page_size)).get_page(request.GET.get('page'))
     for case in page:
         case.review_reasons = hit_map.get(case.pk, [])
     groups = current_cases(request.user).exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
-    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'parent_filter': parent_filter, 'opportunity': opportunity, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
+    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'parent_filter': parent_filter, 'opportunity': opportunity, 'unlinked_count': unlinked_count, 'parent_link': parent_link, 'status_filter': status_filter, 'source_statuses': source_statuses, 'type_counts': type_counts, 'type_filter': type_filter, 'linked_programs': linked_programs, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
 
 @operator_required
 def settings_page(request, module=False):
@@ -210,4 +226,16 @@ def suggestions_page(request):
     from criteria.engine import ensure_rules
     snapshot = active_snapshot(request.user)
     rows = grouped_recommendations(current_cases(request.user), request.user, timezone.localdate(), ensure_rules(options), bool(snapshot and snapshot.coverage.get('notes')))
-    return render(request, 'crm/group_recommendations.html', {'crm_mode': True, 'mode': 'planning-suggestions', 'page': Paginator(rows, 15).get_page(request.GET.get('page'))})
+    return render(request, 'crm/group_recommendations.html', {'crm_mode': True, 'mode': 'planning-suggestions', 'page': Paginator(rows, 10).get_page(request.GET.get('page'))})
+
+
+@operator_required
+def refresh_record(request, module, identifier):
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    try:
+        job = start_job(request.user, 'row', module=module, target=identifier)
+        return redirect('crm-job', pk=job.pk)
+    except CRMError as error:
+        messages.error(request, str(error))
+        return redirect('projects-dashboard' if module == 'projects' else 'planning-dashboard')

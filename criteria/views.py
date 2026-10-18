@@ -1,3 +1,4 @@
+from config.sorting import sort_rows
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -105,10 +106,12 @@ def attention(request, module):
     rows, counts, records, rules = evaluations(request.user, module)
     selected = request.GET.get('rule', '')
     total = len(rows)
-    snapshot = active_snapshot(request.user) if module == 'planning' else None
+    from projects.views import snapshot_for
+    snapshot = active_snapshot(request.user) if module == 'planning' else snapshot_for(request.user)
     if selected:
         rows = [r for r in rows if any(str(rule.pk) == selected for rule in r['rules'])]
+    rows = sort_rows(request, rows, {'title':'item.title','customer':'item.customer','priority':'priority','created':'item.evidence.created_on'})
     for entry in rows:
         for rule in entry['rules']:
             rule.condition_text = rule_description(rule, module)
-    return render(request, 'criteria/attention.html', {**context(module, 'attention'), 'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'counts': counts, 'selected': selected, 'total': total, 'source_count': len(records), 'notes_loaded': bool(snapshot and snapshot.coverage.get('notes'))})
+    return render(request, 'criteria/attention.html', {**context(module, 'attention'), 'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'counts': counts, 'selected': selected, 'total': total, 'source_count': len(records), 'snapshot': snapshot, 'notes_loaded': bool(snapshot and snapshot.coverage.get('notes'))})

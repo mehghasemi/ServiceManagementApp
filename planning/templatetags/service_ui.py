@@ -24,3 +24,18 @@ def case_timing(case, loaded):
     valid = [d for d in dates if d]
     return {'created': case.evidence.get('created_on'), 'active': case.evidence.get('state') == 0,
             'loaded': loaded, 'has_notes': bool(notes), 'last_note': max(valid).isoformat() if valid else None}
+
+
+@register.simple_tag(takes_context=True)
+def sort_header(context, key, label):
+    from django.utils.html import format_html
+    request = context['request']
+    active = request.GET.get('sort') == key
+    descending = active and request.GET.get('direction') == 'desc'
+    params = request.GET.copy()
+    params['sort'] = key
+    params['direction'] = 'asc' if descending else 'desc' if active else 'asc'
+    params.pop('page', None)
+    state = ('descending' if descending else 'ascending') if active else 'none'
+    arrow = ('▼' if descending else '▲') if active else '↕'
+    return format_html('<th aria-sort="{}"><a class="sort-header" href="?{}" aria-label="مرتب‌سازی بر اساس {}">{} <span aria-hidden="true">{}</span></a></th>', state, params.urlencode(), label, label, arrow)

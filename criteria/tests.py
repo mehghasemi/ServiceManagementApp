@@ -32,6 +32,19 @@ class CriteriaTests(TestCase):
         snapshot.cases.add(*ids)
         return CRMCase.objects.filter(pk__in=ids)
 
+    def test_unlinked_queue_and_status_filter_remain_independent_of_grouping(self):
+        cases=self.cases()
+        linked=cases.first()
+        linked.source_status='Planned';linked.save()
+        unlinked=cases.last()
+        unlinked.parent_id='';unlinked.source_status='Planned';unlinked.save()
+        response=self.client.get('/planning/', {'parent_link':'missing','status':'Planned'})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual([c.pk for c in response.context['page']], [unlinked.pk])
+        self.assertEqual(response.context['unlinked_count'],1)
+        response=self.client.get('/planning/', {'parent_link':'missing','status':'Other'})
+        self.assertEqual(response.context['page'].paginator.count,0)
+
     def test_shared_upgrade_and_visit_without_local_actions(self):
         cases = self.cases()
         rows = grouped_recommendations(cases, self.user, timezone.localdate(), self.rules)

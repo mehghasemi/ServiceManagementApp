@@ -47,7 +47,7 @@ try {
  $headers=@{Accept='application/json';'OData-Version'='4.0';Prefer='odata.include-annotations="*"'}
  $r=Invoke-WebRequest -UseBasicParsing -Uri $env:SERVICE_REQUEST_URL -UseDefaultCredentials -Method Get -MaximumRedirection 0 -Headers $headers -TimeoutSec ([int]$env:SERVICE_REQUEST_TIMEOUT)
  [Console]::Write([System.Text.Encoding]::UTF8.GetString($r.RawContentStream.ToArray()))
-} catch { $status=0; if ($_.Exception.Response) {$status=[int]$_.Exception.Response.StatusCode}; [Console]::Write('{"transport_error":'+$status+'}'); exit 22 }
+} catch { $status=0; if ($_.Exception.Response) {$status=[int]$_.Exception.Response.StatusCode}; [Console]::Write((@{transport_error=$status; transport_kind=[string]$_.Exception.Status} | ConvertTo-Json -Compress)); exit 22 }
 '''
         env = os.environ.copy()
         env.update(SERVICE_REQUEST_URL=url, SERVICE_REQUEST_TIMEOUT=str(self.timeout))
@@ -63,7 +63,19 @@ try {
         except ValueError as error:
             raise CRMError('پاسخ CRM قابل خواندن نیست؛ آدرس سازمان و مجوز را بررسی کنید.') from error
         if result.returncode or 'transport_error' in payload:
-            raise CRMError(f"ارتباط CRM ناموفق بود (HTTP {payload.get('transport_error', 0)}). دسترسی ویندوز و شبکه را بررسی کنید؛ داده قبلی حفظ شد.")
+            status = payload.get('transport_error', 0)
+            if not status:
+                kind = payload.get('transport_kind', '')
+                reasons = {
+                    'NameResolutionFailure': 'نام سرور CRM پیدا نشد؛ DNS و اتصال شبکه شرکت را بررسی کنید.',
+                    'ConnectFailure': 'اتصال به سرور CRM برقرار نشد؛ شبکه و دسترسی سرور را بررسی کنید.',
+                    'Timeout': 'سرور CRM در مهلت تعیین‌شده پاسخ نداد؛ دوباره تلاش کنید.',
+                    'TrustFailure': 'اعتبار گواهی HTTPS تأیید نشد؛ از مسئول شبکه کمک بگیرید.',
+                    'SecureChannelFailure': 'ارتباط امن با CRM برقرار نشد؛ تنظیمات TLS و شبکه بررسی شود.',
+                    'ReceiveFailure': 'دریافت پاسخ CRM قطع شد؛ محدودیت محیط اجرای برنامه یا ارتباط شبکه باید بررسی شود.',
+                }
+                raise CRMError(reasons.get(kind, 'پاسخ HTTP از CRM دریافت نشد؛ محیط اجرای برنامه و شبکه را بررسی کنید.') + ' داده قبلی حفظ شد.')
+            raise CRMError(f"ارتباط CRM ناموفق بود (HTTP {status}). دسترسی ویندوز و شبکه را بررسی کنید؛ داده قبلی حفظ شد.")
         return payload
 
     def paged(self, path):
@@ -112,7 +124,7 @@ try {
         available = {row['LogicalName'] for row in names}
         needed = {
             'brd_project': ('brd_projectid', 'brd_name', 'statuscode', 'statecode', 'brd_account', 'brd_customer', 'brd_projectmanager', 'brd_plannedenddate', 'brd_realenddate', 'brd_lastnotedate', 'brd_lastaction', 'brd_currentphase', 'brd_progress', 'modifiedon'),
-            'incident': ('incidentid', 'ticketnumber', 'title', 'createdon', 'modifiedon', 'statuscode', 'statecode', 'customerid', 'brd_account', 'brd_plannedcase', 'ownerid', 'brd_startplanningdate'),
+            'incident': ('incidentid', 'ticketnumber', 'title', 'createdon', 'modifiedon', 'statuscode', 'statecode', 'customerid', 'brd_account', 'brd_plannedcase', 'ownerid', 'brd_startplanningdate', 'brd_incidenttype', 'casetypecode'),
             'annotation': ('annotationid', 'objectid', 'subject', 'notetext', 'modifiedon', 'createdon'),
             'task': ('activityid', 'regardingobjectid', 'subject', 'description', 'scheduledend', 'statecode', 'modifiedon'),
             'activitypointer': ('activityid', 'regardingobjectid', 'subject', 'description', 'scheduledend', 'statecode', 'modifiedon'),
@@ -122,12 +134,29 @@ try {
             for name in needed:
                 if name in available and name not in selected:
                     ET.SubElement(entity, 'attribute', {'name': name})
+        if view['entity'] == 'incident':
+            # Outer account lookups add evidence without widening the View's case membership.
+            account_attrs = self.paged("EntityDefinitions(LogicalName='account')/Attributes?$select=LogicalName")
+            if 'brd_automationversion' in {r['LogicalName'] for r in account_attrs}:
+                aliases = {link.get('alias') for link in entity.iter('link-entity')}
+                for lookup in ('brd_account', 'customerid'):
+                    alias = 'sma_upgrade_' + lookup
+                    if lookup in available and alias not in aliases:
+                        link = ET.SubElement(entity, 'link-entity', {'name': 'account', 'from': 'accountid', 'to': lookup, 'alias': alias, 'link-type': 'outer'})
+                        ET.SubElement(link, 'attribute', {'name': 'brd_automationversion'})
+        if view['entity'] == 'incident':
+            for link in entity.findall('link-entity'):
+                if link.get('name') == 'incident' and link.get('to') == 'brd_plannedcase' and link.get('alias'):
+                    selected_parent = {a.get('name') for a in link.findall('attribute')}
+                    for field in ('title', 'brd_incidenttype', 'brd_plannedstartdate', 'brd_plannedenddate'):
+                        if field in available and field not in selected_parent and link.find('all-attributes') is None:
+                            ET.SubElement(link, 'attribute', {'name': field})
         if related_ids is not None:
-            if view['entity'] != 'annotation':
-                raise CRMError('محدودسازی ارتباط فقط برای View یادداشت مجاز است.')
+            target_fields = {'annotation': 'objectid', 'incident': 'incidentid', 'brd_project': 'brd_projectid', 'task': 'regardingobjectid', 'activitypointer': 'regardingobjectid'}
+            target_field = target_fields[view['entity']]
             if not related_ids:
                 return [], xml, definition.get('name', '')
-            condition = ET.SubElement(ET.SubElement(entity, 'filter', {'type': 'and'}), 'condition', {'attribute': 'objectid', 'operator': 'in'})
+            condition = ET.SubElement(ET.SubElement(entity, 'filter', {'type': 'and'}), 'condition', {'attribute': target_field, 'operator': 'in'})
             for identifier in sorted(set(related_ids)):
                 ET.SubElement(condition, 'value').text = str(UUID(identifier))
         original_top = root.get('top')
