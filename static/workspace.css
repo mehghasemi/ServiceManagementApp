@@ -66,3 +66,5 @@ body{line-height:1.65}.topbar{height:52px;padding-inline:18px}main{padding:12px 
 .bar-row .bar-fill{fill:var(--series,var(--chart))}.bar-row .bar-label strong{color:var(--series,var(--ink))}.upgrade-stats .stat:nth-child(1){border-top-color:var(--series-1)}.upgrade-stats .stat:nth-child(2){border-top-color:var(--series-2)}.upgrade-stats .stat:nth-child(3){border-top-color:var(--series-3)}.upgrade-stats .stat:nth-child(4){border-top-color:var(--series-4)}.recent-upgrades{border-inline-start:3px solid var(--series-2)}.recent-upgrades p{margin:4px 0;font-size:12px}
 
 .sort-header{color:inherit;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}.sort-header:hover{color:var(--accent-dark)}.sort-header:focus-visible{outline:2px solid var(--chart);outline-offset:4px}th[aria-sort=ascending],th[aria-sort=descending]{background:var(--hover)}
+
+.row-sync{color:var(--series-1);border-color:var(--series-1)}.row-freshness.has-notes{color:var(--series-2)}.row-freshness.missing-notes{color:var(--series-4);border-color:var(--series-4)}.row-refresh-controls{white-space:nowrap}

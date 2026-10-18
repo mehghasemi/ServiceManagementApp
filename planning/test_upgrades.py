@@ -20,3 +20,16 @@ class UpgradeTests(SimpleTestCase):
         row=customer_rows([(case,{'active':True,'has_parent':True})],rule)[0]
         self.assertFalse(row['qualifies'])
         self.assertEqual(row['current'],'Fonix-12.1')
+
+
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+
+class UpgradeRouteTests(TestCase):
+    def test_menu_and_dashboard_are_available_to_operator(self):
+        user=get_user_model().objects.create_user('synthetic-operator',is_staff=True)
+        self.client.force_login(user)
+        page=self.client.get('/planning/')
+        self.assertContains(page, '/planning/upgrades/')
+        page=self.client.get('/planning/upgrades/')
+        self.assertContains(page, 'داشبورد ارتقای مشتریان')

@@ -17,8 +17,8 @@ foreach ($mode in @('stable', 'development')) {
     $port = if ($mode -eq 'stable') { 8769 } else { 8768 }
     $config = @{ python=$python; source=$source; database=(Join-Path $root "private\$db"); mode=$mode; port=$port; log=(Join-Path $root "private\$mode-task.log") }
     $config | ConvertTo-Json | Set-Content "$operations\$mode.json" -Encoding UTF8
-    Copy-Item "$root\runtime-task.ps1" "$operations\runtime-task.ps1" -Force
-    $action = New-ScheduledTaskAction -Execute "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$operations\runtime-task.ps1`" -Config `"$operations\$mode.json`"" -WorkingDirectory $root
+    Copy-Item "$root\managed_runtime.py" "$operations\managed_runtime.py" -Force
+    $action = New-ScheduledTaskAction -Execute (Join-Path $root '.venv\Scripts\pythonw.exe') -Argument "`"$operations\managed_runtime.py`" `"$operations\$mode.json`"" -WorkingDirectory $root
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $identity
     $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable

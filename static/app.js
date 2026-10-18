@@ -111,5 +111,7 @@ window.addEventListener('scroll', () => { controlTip.hidden = true; }, true);
 document.querySelectorAll('[data-refresh-time]').forEach(el => {
   const stamp = new Date(el.dataset.refreshTime);
   el.dataset.tooltip = Number.isNaN(stamp.valueOf()) ? 'زمان دریافت این مورد ثبت نشده؛ پس از به‌روزرسانی نمایش داده می‌شود.' : 'آخرین دریافت موفق این مورد: ' + new Intl.DateTimeFormat('fa-IR', {dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Tehran'}).format(stamp);
+  el.dataset.tooltip += '؛ ' + (el.dataset.notesStatus || '');
+  el.dataset.help = el.dataset.tooltip;
   el.setAttribute('aria-label', el.dataset.tooltip);
 });

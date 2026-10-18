@@ -65,4 +65,7 @@ def refresh_row(job, client, checkpoint):
                 raise CRMError('مورد در دریافت فعلی موجود نیست.')
             snapshot.records = [record if row['id'] == identifier else row for row in snapshot.records]
             snapshot.save(update_fields=['records'])
-        SyncJob.objects.filter(pk=job.pk).update(status='success', finished_at=now, progress=1, message='همین مورد و شواهد Viewهای انتخابی به‌روز شد؛ اقدام‌های محلی حفظ شدند.')
+        note_message = ('یادداشت‌های مرتبط در View انتخابی نیز دریافت شدند.' if notes is not None else
+                        'یادداشت‌ها دریافت نشدند؛ ابتدا View یادداشت‌ها را در تنظیمات همین ماژول انتخاب کنید.')
+        SyncJob.objects.filter(pk=job.pk).update(status='success', finished_at=now, progress=1,
+            message='همین مورد به‌روز شد؛ ' + note_message + ' اقدام‌های محلی حفظ شدند.')
