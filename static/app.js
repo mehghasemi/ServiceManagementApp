@@ -115,3 +115,50 @@ document.querySelectorAll('[data-refresh-time]').forEach(el => {
   el.dataset.help = el.dataset.tooltip;
   el.setAttribute('aria-label', el.dataset.tooltip);
 });
+
+// Single-record sync stays in context; no progress-page navigation.
+const rowDialog = document.createElement('dialog');
+rowDialog.className = 'row-sync-dialog';
+rowDialog.setAttribute('aria-labelledby', 'row-sync-title');
+rowDialog.innerHTML = '<h2 id="row-sync-title">بازخوانی مورد</h2><p role="status" aria-live="polite"></p><div class="actions"><button type="button" class="button secondary" data-close>بستن</button><button type="button" class="button primary" data-reload hidden>نمایش اطلاعات تازه</button></div>';
+document.body.append(rowDialog);
+const syncMessage = rowDialog.querySelector('p');
+const reloadRow = rowDialog.querySelector('[data-reload]');
+let rowSyncRunning = false;
+rowDialog.querySelector('[data-close]').addEventListener('click', () => rowDialog.close());
+reloadRow.addEventListener('click', () => location.reload());
+document.querySelectorAll('.row-refresh-controls form').forEach(form => {
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (rowSyncRunning) { rowDialog.showModal(); return; }
+    rowSyncRunning = true;
+    reloadRow.hidden = true;
+    syncMessage.textContent = 'در حال ارسال درخواست؛ این مورد و یادداشت‌های View انتخابی دریافت می‌شوند…';
+    rowDialog.showModal();
+    const button = form.querySelector('button');
+    button.disabled = true;
+    try {
+      const response = await fetch(form.action, {method:'POST', body:new FormData(form), headers:{Accept:'application/json'}, credentials:'same-origin'});
+      if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('نشست یا دسترسی معتبر نیست؛ صفحه را تازه‌سازی کنید.');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'شروع دریافت ناموفق بود.');
+      for (let attempt=0; attempt<450; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        const status = await fetch(data.url, {headers:{Accept:'application/json'}, credentials:'same-origin',cache:'no-store'});
+        if (!status.ok || !status.headers.get('content-type')?.includes('application/json')) throw new Error('پیگیری دریافت ممکن نیست؛ اطلاعات قبلی حفظ شده است.');
+        const job = await status.json();
+        syncMessage.textContent = job.message;
+        if (job.status === 'success') { reloadRow.hidden = false; return; }
+        if (!['queued','running'].includes(job.status)) return;
+      }
+      syncMessage.textContent = 'پیگیری خودکار پایان یافت؛ دریافت ممکن است هنوز ادامه داشته باشد. فعلاً دوباره درخواست ندهید.';
+    } catch(error) { syncMessage.textContent = error.message || 'ارتباط برقرار نشد؛ اطلاعات قبلی حفظ شد.'; }
+    finally { rowSyncRunning = false; button.disabled = false; }
+  });
+});
+
+document.getElementById('apply-action-preset')?.addEventListener('click', () => {
+  const preset=document.getElementById('action-preset');
+  const title=document.getElementById('id_title');
+  if (preset?.value && title) { title.value=preset.value; title.dispatchEvent(new Event('input',{bubbles:true})); title.focus(); }
+});

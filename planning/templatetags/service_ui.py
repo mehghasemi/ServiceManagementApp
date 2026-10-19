@@ -39,3 +39,18 @@ def sort_header(context, key, label):
     state = ('descending' if descending else 'ascending') if active else 'none'
     arrow = ('▼' if descending else '▲') if active else '↕'
     return format_html('<th aria-sort="{}"><a class="sort-header" href="?{}" aria-label="مرتب‌سازی بر اساس {}">{} <span aria-hidden="true">{}</span></a></th>', state, params.urlencode(), label, label, arrow)
+
+
+@register.simple_tag
+def customer_link(name, identifier=None):
+    from uuid import UUID
+    from django.urls import reverse
+    from django.utils.html import format_html
+    try:
+        identifier = str(UUID(str(identifier)))
+    except (ValueError, TypeError, AttributeError):
+        return format_html('<span data-tooltip="شناسه مشتری دریافت نشده؛ پس از بازخوانی قابل پیوند است.">{}</span>', name or 'نامشخص')
+    return format_html('<a class="customer-link" href="{}?customer={}" aria-label="کیس‌های برنامه‌ریزی مشتری {}" data-tooltip="نمایش همه کیس‌های مجاز این مشتری در View برنامه‌ریزی"><span class="grid-text">{}</span><span aria-hidden="true">↗</span></a>', reverse('planning-dashboard'), identifier, name or 'نامشخص', name or 'نامشخص')
+
+from config.dates import persian_date
+register.filter("persian_date", persian_date)

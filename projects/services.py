@@ -33,6 +33,7 @@ def normalize_projects(rows, notes):
         result[identifier] = {
             'id': identifier, 'title': row.get('brd_name') or '', 'status': label(row, 'statuscode'),
             'state': row.get('statecode'), 'customer': label(row, '_brd_account_value') or label(row, '_brd_customer_value'),
+            'customer_id': guid(row.get('_brd_account_value') or row.get('_brd_customer_value')),
             'manager': label(row, '_brd_projectmanager_value'), 'phase': label(row, 'brd_currentphase'),
             'planned_end': row.get('brd_plannedenddate'), 'actual_end': row.get('brd_realenddate'),
             'last_note_date': row.get('brd_lastnotedate'), 'last_action': row.get('brd_lastaction') or '',

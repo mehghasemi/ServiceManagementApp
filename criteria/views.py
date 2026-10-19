@@ -110,7 +110,7 @@ def attention(request, module):
     snapshot = active_snapshot(request.user) if module == 'planning' else snapshot_for(request.user)
     if selected:
         rows = [r for r in rows if any(str(rule.pk) == selected for rule in r['rules'])]
-    rows = sort_rows(request, rows, {'title':'item.title','customer':'item.customer','priority':'priority','created':'item.evidence.created_on'})
+    rows = sort_rows(request, rows, {'title':'item.title','number':'item.number','customer':'item.customer','priority':'priority','created':'item.evidence.created_on'})
     for entry in rows:
         for rule in entry['rules']:
             rule.condition_text = rule_description(rule, module)

@@ -50,6 +50,7 @@ class ModuleSettings(models.Model):
     page_size = models.PositiveIntegerField(default=20)
     revision = models.PositiveIntegerField(default=1)
     rules_initialized = models.BooleanField(default=False)
+    action_templates = models.TextField(blank=True, default='پیگیری ارتقا\nهماهنگی مراجعه حضوری\nهماهنگی پشتیبانی ریموت\nپیگیری رفع توسط تولید\nتأیید نتیجه با مشتری')
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['module', 'scope'], name='unique_module_source')]
@@ -113,8 +114,9 @@ class CaseAction(models.Model):
     case = models.ForeignKey(CRMCase, on_delete=models.PROTECT, related_name='local_actions')
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     title = models.CharField(max_length=500)
-    responsible = models.CharField(max_length=120)
-    due_date = models.DateField()
+    responsible = models.CharField(max_length=120, blank=True)
+    due_date = models.DateField(null=True, blank=True)
+    selected_preset = models.CharField(max_length=500, blank=True)
     blocker = models.TextField(blank=True, max_length=2000)
     status = models.CharField(max_length=20, choices=[('open', 'باز'), ('done', 'پیگیری انجام شده')], default='open')
     result = models.TextField(blank=True, max_length=3000)

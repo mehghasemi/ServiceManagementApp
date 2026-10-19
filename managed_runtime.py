@@ -28,6 +28,9 @@ def main():
     log = open(config['log'], 'a', encoding='utf-8', buffering=1)
     sys.stdout = sys.stderr = log
     sys.argv = [str(source / 'run_preview.py'), str(config['port'])]
+    if config.get('network'):
+        sys.argv = [str(source / 'run_lan.py'), '--host', config['host'],
+                    '--subnet', config['subnet'], '--port', str(config['port'])]
     # Managed tasks restart explicitly; no autoreloader can escape supervision.
     from django.core import management
     original_command = management.call_command

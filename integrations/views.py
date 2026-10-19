@@ -93,7 +93,7 @@ def dashboard(request):
         selected_rule = next((r for r in rules if str(r.pk) == opportunity and r.enabled and r.purpose == 'opportunity'), None)
         ids = [case.pk for case, facts in facts_rows if selected_rule and matches(selected_rule, facts) is True]
         rows = rows.filter(pk__in=ids)
-    rows = sort_rows(request, rows.order_by('customer', 'parent_id', 'number', 'pk'), {'case':'number','customer':'customer','status':'source_status','parent':'parent_title','created':'evidence.created_on','actions':'open_actions'})
+    rows = sort_rows(request, rows.order_by('customer', 'parent_id', 'number', 'pk'), {'case':'number','title':'title','type':'evidence.incident_type','category':'evidence.case_category','customer':'customer','status':'source_status','parent':'parent_title','created':'evidence.created_on','actions':'open_actions'})
     page = Paginator(rows, display_page_size(request, options.page_size)).get_page(request.GET.get('page'))
     for case in page:
         case.review_reasons = hit_map.get(case.pk, [])
@@ -167,12 +167,12 @@ def case_detail(request, pk):
     facts = planning_facts(current_cases(request.user).filter(pk=case.pk), request.user, bool(snapshot.coverage.get('notes')), timezone.localdate())[0][1]
     case_reasons = [r for r in rules if r.purpose == 'attention' and matches(r, facts) is True]
     actions = shared_queryset(case.local_actions.all(), request.user, 'actor').order_by('-created_at')
-    return render(request, 'crm/case.html', {'case': case, 'actions': actions, 'snapshot': snapshot, 'reasons': case_reasons, 'crm_mode': True, 'mode': 'crm-planning'})
+    return render(request, 'crm/case.html', {'case': case, 'actions': actions, 'last_followup': actions.first(), 'last_completed': actions.filter(completed_at__isnull=False).order_by('-completed_at').first(), 'snapshot': snapshot, 'reasons': case_reasons, 'crm_mode': True, 'mode': 'crm-planning'})
 
 @operator_required
 def create_action(request, pk):
     case = get_object_or_404(current_cases(request.user), pk=pk)
-    form = ActionForm(request.POST if request.method == 'POST' else None)
+    form = ActionForm(request.POST if request.method == 'POST' else None, presets=[p.strip() for p in module_settings().action_templates.splitlines() if p.strip()])
     status = 200
     if request.method == 'POST' and form.is_valid():
         data = {key: form.cleaned_data[key] for key in form.Meta.fields}
@@ -186,7 +186,7 @@ def create_action(request, pk):
                     ActionAudit.objects.create(action=action, actor=request.user, event='ایجاد اقدام محلی', data={k: str(v) for k, v in data.items()})
                 messages.success(request, 'اقدام به کیس CRM متصل و محلی ذخیره شد؛ CRM تغییر نکرد.')
                 return redirect('crm-case', pk=pk)
-    return render(request, 'crm/action.html', {'form': form, 'case': case, 'title': 'تعریف اقدام برای کیس', 'crm_mode': True, 'mode': 'crm-planning'}, status=status)
+    return render(request, 'crm/action.html', {'form': form, 'case': case, 'action_templates': [line.strip() for line in module_settings().action_templates.splitlines() if line.strip()], 'title': 'تعریف اقدام برای کیس', 'crm_mode': True, 'mode': 'crm-planning'}, status=status)
 
 @operator_required
 def complete_action(request, pk):
@@ -235,7 +235,12 @@ def refresh_record(request, module, identifier):
         return HttpResponseNotAllowed(['POST'])
     try:
         job = start_job(request.user, 'row', module=module, target=identifier)
+        if request.headers.get('Accept') == 'application/json':
+            from django.urls import reverse
+            return JsonResponse({'url': reverse('crm-job', args=[job.pk]) + '?format=json'}, status=202)
         return redirect('crm-job', pk=job.pk)
     except CRMError as error:
+        if request.headers.get('Accept') == 'application/json':
+            return JsonResponse({'message': str(error)}, status=409)
         messages.error(request, str(error))
         return redirect('projects-dashboard' if module == 'projects' else 'planning-dashboard')

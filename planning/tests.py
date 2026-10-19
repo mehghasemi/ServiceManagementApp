@@ -101,7 +101,7 @@ class PlanningTests(TestCase):
 
     def test_database_error_preserves_form_input(self):
         with patch('planning.views.save_program', side_effect=DatabaseError):
-            response = self.client.post(reverse('edit', args=[self.program.pk]), self.payload(title='متن حفظ شود'))
+            response = self.client.post(reverse('edit', args=[self.program.pk]), self.payload(title='متن حفظ شود', due_date=__import__('config.dates',fromlist=['persian_date']).persian_date(timezone.localdate())))
         self.assertEqual(response.status_code, 503)
         self.assertContains(response, 'متن حفظ شود', status_code=503)
 

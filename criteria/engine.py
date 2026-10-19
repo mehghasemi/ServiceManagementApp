@@ -101,7 +101,7 @@ def planning_facts(cases, user, loaded, today):
                  'has_parent': bool(case.parent_id), 'parent_status': case.parent_status or None,
                  'source_status': case.source_status or None, 'parent_title': case.parent_title or None,
                  'title': case.title or None, 'open_count': len(case.rule_actions),
-                 'overdue_days': max(((today-a.due_date).days for a in case.rule_actions), default=None),
+                 'overdue_days': max(((today-a.due_date).days for a in case.rule_actions if a.due_date), default=None),
                  'blocker_count': sum(bool(a.blocker.strip()) for a in case.rule_actions),
                  **note_facts(case.evidence.get('notes', []), loaded, today)}
         result.append((case, facts))

@@ -77,6 +77,13 @@ class IntegrationTests(TestCase):
         self.assertEqual(job.status, 'failed')
         self.assertEqual(case.fetched_at, stamp)
 
+    def test_row_refresh_json_stays_in_page(self):
+        from types import SimpleNamespace
+        with patch('integrations.views.start_job', return_value=SimpleNamespace(pk=123)):
+            response = self.client.post('/planning/cases/1/refresh/', HTTP_ACCEPT='application/json')
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['url'], '/crm/jobs/123/?format=json')
+
     def test_row_endpoint_rejects_outside_view_and_get(self):
         self.sync(); case = CRMCase.objects.get()
         self.assertEqual(self.client.get(f'/planning/cases/{case.pk}/refresh/').status_code, 405)
@@ -173,7 +180,7 @@ class IntegrationTests(TestCase):
     def test_action_creation_retry_and_completion(self):
         self.sync()
         case = CRMCase.objects.get()
-        payload = dict(title='هماهنگی', responsible='نمونه', due_date=str(timezone.localdate()), blocker='', request_key=str(uuid.uuid4()), confirm=True)
+        payload = dict(title='هماهنگی', responsible='نمونه', due_date=__import__('config.dates',fromlist=['persian_date']).persian_date(timezone.localdate()), blocker='', request_key=str(uuid.uuid4()), confirm=True)
         for _ in range(2):
             self.assertEqual(self.client.post(f'/planning/cases/{case.pk}/actions/new/', payload).status_code, 302)
         self.assertEqual(CaseAction.objects.count(), 1)

@@ -41,3 +41,10 @@ class PresentationTests(SimpleTestCase):
         self.assertNotIn('روی Done',text)
         self.assertNotIn('نصب نسخه',text)
         self.assertIn('Waiting for Customer',text)
+
+    def test_customer_links_use_id_and_escape_name(self):
+        from planning.templatetags.service_ui import customer_link
+        html=str(customer_link('<script>', '11111111-1111-1111-1111-111111111111'))
+        self.assertIn('?customer=11111111-', html)
+        self.assertNotIn('<script>', html)
+        self.assertNotIn('href=', str(customer_link('same name', None)))

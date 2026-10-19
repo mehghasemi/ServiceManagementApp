@@ -1,3 +1,4 @@
+from config.dates import PersianDateField
 import uuid
 from django import forms
 from .models import SystemSettings, ModuleSettings, CRMView, CaseAction
@@ -28,9 +29,17 @@ class SystemForm(ConfirmedForm):
         return data
 
 class ModuleForm(ConfirmedForm):
+    action_templates = forms.CharField(label='اقدام‌های آماده', required=False, max_length=10000, widget=forms.Textarea(attrs={'rows': 5}), help_text='هر اقدام در یک خط؛ ترتیب خطوط ترتیب نمایش است. حذف یک خط آن گزینه را حذف می‌کند؛ اقدام‌های ثبت‌شده قبلی تغییر نمی‌کنند. حداکثر ۳۰ گزینه، هر گزینه ۵۰۰ نویسه.')
+
+    def clean_action_templates(self):
+        rows = list(dict.fromkeys(line.strip() for line in self.cleaned_data['action_templates'].splitlines() if line.strip()))
+        if len(rows) > 30 or any(len(line) > 500 for line in rows):
+            raise forms.ValidationError('حداکثر ۳۰ اقدام، هر اقدام حداکثر ۵۰۰ نویسه وارد کنید.')
+        return '\n'.join(rows)
+
     class Meta:
         model = ModuleSettings
-        fields = ['case_view', 'note_view', 'activity_view', 'page_size']
+        fields = ['case_view', 'note_view', 'activity_view', 'page_size', 'action_templates']
         labels = {'case_view': 'View اصلی کیس‌های برنامه‌ریزی', 'note_view': 'View شواهد یادداشت؛ اختیاری', 'activity_view': 'View فعالیت‌ها؛ اختیاری', 'stale_days': 'آستانه قدمت یادداشت (روز)', 'parent_review_statuses': 'وضعیت‌های برنامه مرتبط برای بازبینی', 'page_size': 'تعداد ردیف در صفحه'}
         help_texts = {'case_view': 'فقط Viewهای موجودیت Case؛ فیلترهای خود View حفظ می‌شوند. تا تغییر صریح، انتخاب ثابت است.', 'note_view': 'فقط یادداشت‌های این View و مرتبط با کیس‌ها یا برنامه مادر تحلیل می‌شوند؛ پوشش کامل تضمین نمی‌شود.', 'activity_view': 'فعالیت‌های همین View برای شواهد موعد و اقدام استفاده می‌شوند؛ چیزی خارج از View خوانده نمی‌شود.', 'stale_days': 'قدمت یادداشت صرفاً علامت بازبینی است، نه نبود کار. بین ۱ تا ۳۶۵ روز.', 'parent_review_statuses': 'برچسب دقیق وضعیت‌ها با ویرگول جدا شود. تطبیق فقط با داده برنامه مرتبط موجود در View انجام می‌شود.', 'page_size': 'بین ۱۰ تا ۱۰۰؛ روی دریافت CRM اثری ندارد.'}
 
@@ -50,14 +59,33 @@ class ModuleForm(ConfirmedForm):
         return data
 
 class ActionForm(forms.ModelForm):
+    selected_preset = forms.ChoiceField(label='اقدام آماده', required=False)
+    due_date = PersianDateField(label='موعد پیگیری (شمسی)', required=False)
+
+    def __init__(self, *args, presets=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['selected_preset'].choices = [('', 'اقدام دلخواه')] + [(p,p) for p in presets]
+        for name in ('title','responsible'):
+            self.fields[name].required = False
+        self.order_fields(['selected_preset','title','responsible','due_date','blocker','request_key','confirm'])
+
+    def clean(self):
+        data = super().clean()
+        if data.get('selected_preset'):
+            data['title'] = data.get('title') or data['selected_preset']
+        else:
+            for name in ('title','responsible','due_date'):
+                if not data.get(name): self.add_error(name, 'برای اقدام دلخواه این فیلد لازم است؛ یا اقدام آماده انتخاب کنید.')
+        return data
+
     request_key = forms.UUIDField(widget=forms.HiddenInput, initial=uuid.uuid4)
     confirm = forms.BooleanField(label='ثبت اقدام محلی را تأیید می‌کنم.', help_text='فقط در این برنامه ذخیره می‌شود؛ هیچ رکورد CRM تغییر نمی‌کند.')
     class Meta:
         model = CaseAction
-        fields = ['title', 'responsible', 'due_date', 'blocker']
+        fields = ['title', 'responsible', 'due_date', 'blocker', 'selected_preset']
         labels = {'title': 'اقدام بعدی', 'responsible': 'مسئول پیگیری', 'due_date': 'موعد پیگیری', 'blocker': 'مانع یا پیش‌نیاز'}
-        help_texts = {'title': 'اقدام روشن بر اساس شواهد کیس؛ مثلاً هماهنگی زمان نصب.', 'responsible': 'مسئول داخلی پیگیری؛ فعلاً متن آزاد است و تخصیص حساب کاربری نیست.', 'due_date': 'ورود میلادی، نمایش شمسی؛ موعد پیگیری است نه وعده رفع کیس.', 'blocker': 'مانع تأییدشده یا نیازمند بررسی را با توضیح مشخص کنید؛ از حدس قطعی پرهیز کنید.'}
-        widgets = {'due_date': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'), 'blocker': forms.Textarea(attrs={'rows': 3})}
+        help_texts = {'title': 'اقدام روشن بر اساس شواهد کیس؛ مثلاً هماهنگی زمان نصب.', 'responsible': 'مسئول داخلی پیگیری؛ فعلاً متن آزاد است و تخصیص حساب کاربری نیست.', 'due_date': 'ورود و نمایش شمسی؛ موعد پیگیری است نه وعده رفع کیس.', 'blocker': 'مانع تأییدشده یا نیازمند بررسی را با توضیح مشخص کنید؛ از حدس قطعی پرهیز کنید.'}
+        widgets = {'blocker': forms.Textarea(attrs={'rows': 3})}
 
 class CompleteForm(forms.Form):
     revision = forms.IntegerField(widget=forms.HiddenInput)
