@@ -1,6 +1,13 @@
 """One-time editable starting values; never override a user's saved rules."""
 def definitions(options):
+    if options.module == 'backlogs':
+        return [
+            dict(code='periodic', label='بازدید دوره‌ای', dashboard='periodic', metric='case_service', operator='in', value=['برنامه ریزی - بازدید دوره ای'], purpose='attention', active_only=True, priority=2),
+            dict(code='onsite', label='نیازمند مراجعه حضوری', dashboard='onsite', metric='source_status', operator='in', value=['Checking in Presence Services'], purpose='attention', active_only=True, priority=2),
+        ]
     def rule(code, label, metric, operator, value, priority=3, **extra):
+        if code in ('upgrade', 'onsite'):
+            extra.setdefault('dashboard', code)
         if options.module == 'planning' and extra.get('purpose', 'attention') == 'attention':
             extra.setdefault('attention_group', {'missing_parent':'information','parent_review':'clarification','resolution_review':'clarification','stale':'information','overdue':'decision','blocked':'decision'}.get(code, ''))
         return dict(code=code, label=label, metric=metric, operator=operator, value=value, priority=priority, **extra)

@@ -3,9 +3,13 @@ from django.contrib.staticfiles.views import serve
 from planning import views
 from integrations import views as crm
 from config.views import home
+from django.conf import settings
+from django.views.generic import RedirectView
 from config.accounts import users
+from config.grid_preferences import preferences
 
 urlpatterns = [
+    path('preferences/grids/<slug:key>/', preferences, name='grid-preferences'),
     path('network-users/', users, name='network-users'),
     path('', home, name='home'),
     path('projects/', include('projects.urls')),
@@ -15,7 +19,7 @@ urlpatterns = [
     path('crm/jobs/start/<str:kind>/', crm.begin_job, name='crm-start-job'),
     path('crm/jobs/<int:pk>/', crm.job_status, name='crm-job'),
     path('crm/jobs/<int:pk>/cancel/', crm.cancel_job, name='crm-cancel-job'),
-    path('demo/today/', views.board, name='today'),
+    path('demo/today/', RedirectView.as_view(pattern_name='planning-dashboard', permanent=False) if settings.SERVICE_ENVIRONMENT == 'stable' else views.board, name='today'),
     path('programs/', views.board, {'mode': 'programs'}, name='programs'),
     path('decisions/', views.board, {'mode': 'decisions'}, name='decisions'),
     path('welcome/', views.welcome, name='welcome'),

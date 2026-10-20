@@ -1,0 +1,27 @@
+/* Keep tabular layout inside its own scroll area, including small screens. */
+.table-wrap{max-width:100%;overflow-x:auto}
+table.personal-grid{display:table!important;table-layout:fixed;min-width:0!important;border-collapse:collapse}
+.personal-grid thead{display:table-header-group!important;position:static!important;width:auto!important;height:auto!important;clip-path:none!important;overflow:visible!important}.personal-grid tbody{display:table-row-group!important}
+.personal-grid tr{display:table-row!important;height:48px!important}
+.personal-grid th,.personal-grid td{display:table-cell!important;min-width:0!important;max-width:none!important;box-sizing:border-box;padding:4px 10px!important;vertical-align:middle;overflow:hidden}
+.personal-grid [hidden]{display:none!important}
+.personal-grid td::before{display:none!important}
+.personal-grid th{position:relative;padding-inline-end:10px!important;white-space:nowrap;text-overflow:ellipsis}
+.personal-grid .grid-cell-content{height:38px;max-height:38px;overflow:auto;scrollbar-width:none;white-space:nowrap;line-height:34px}
+.personal-grid .grid-cell-content::-webkit-scrollbar{display:none}
+.personal-grid .grid-text{display:inline;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:inherit}
+.personal-grid .cell-sub,.personal-grid .reason,.personal-grid .grid-cell-content>small{display:inline;margin-inline-start:6px}
+.personal-grid .customer-link{vertical-align:middle}
+.grid-cell-content:focus-visible{outline:2px solid var(--chart);outline-offset:-2px}
+.grid-resize{position:absolute;inset-inline-end:0;top:0;bottom:0;width:7px;padding:0;border:0;border-inline-start:1px solid var(--line);color:var(--accent-dark);background:var(--surface);cursor:col-resize;touch-action:none;font-size:12px}
+.grid-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:6px 0;font-size:11px}
+.grid-dialog{width:min(600px,calc(100% - 32px));max-height:80vh;overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:16px}
+.grid-dialog::backdrop{background:#0007}.grid-dialog h2{font-size:16px}.grid-dialog p{font-size:12px}
+.grid-column-option{display:flex;align-items:center;gap:6px;padding:5px;border-bottom:1px solid var(--line)}
+.grid-column-option label{flex:1;display:flex;align-items:center;gap:6px}.grid-column-option input[type=checkbox]{width:auto}.grid-column-option input[type=number]{width:78px;min-width:0}
+.grid-full-text{white-space:pre-wrap;overflow-wrap:anywhere;margin:12px 0;line-height:1.9}
+
+.personal-grid td[data-tone="1"]{color:var(--series-1)}.personal-grid td[data-tone="2"]{color:var(--series-2)}.personal-grid td[data-tone="3"]{color:var(--series-3)}.personal-grid td[data-tone="4"]{color:var(--series-4)}.personal-grid td[data-tone="5"]{color:var(--series-6)}
+.personal-grid td[data-column="title"]{font-weight:600}.personal-grid td[data-column="tickets"],.personal-grid td[data-column="count"]{color:var(--series-2);font-weight:bold}
+.compact-chart{max-height:230px;overflow:auto}.compact-chart .bar-row{margin:6px 0}.project-tools{display:flex;align-items:flex-start;gap:12px;margin:10px 0;flex-wrap:wrap}.compact-guide{font-size:12px;margin:8px 0}.compact-guide p{margin:6px 0}.project-overview h2{margin:0 0 8px;font-size:15px}
+.grid-resize:hover,.grid-resize:focus-visible{background:var(--chart);outline:1px solid var(--chart)}

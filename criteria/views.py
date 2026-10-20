@@ -14,7 +14,7 @@ from .forms import SelectionForm, RuleForm
 
 
 def context(module, mode):
-    return {'crm_mode': True, 'active_module': module, 'mode': mode, 'module_key': module, 'module_label': 'برنامه‌ریزی' if module == 'planning' else 'مدیریت پروژه‌ها'}
+    return {'crm_mode': True, 'active_module': 'planning' if module == 'backlogs' else module, 'mode': mode, 'module_key': module, 'criteria_url': module+'-criteria', 'new_rule_url': module+'-rule-new', 'edit_rule_url': module+'-rule-edit', 'module_label': {'planning':'برنامه‌ریزی','projects':'مدیریت پروژه‌ها','backlogs':'بکلاگ‌ها'}[module]}
 
 
 def rule_description(rule, module):

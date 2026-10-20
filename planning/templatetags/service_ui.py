@@ -38,7 +38,7 @@ def sort_header(context, key, label):
     params.pop('page', None)
     state = ('descending' if descending else 'ascending') if active else 'none'
     arrow = ('▼' if descending else '▲') if active else '↕'
-    return format_html('<th aria-sort="{}"><a class="sort-header" href="?{}" aria-label="مرتب‌سازی بر اساس {}">{} <span aria-hidden="true">{}</span></a></th>', state, params.urlencode(), label, label, arrow)
+    return format_html('<th data-column="{}" aria-sort="{}"><a class="sort-header" href="?{}" aria-label="مرتب‌سازی بر اساس {}">{} <span aria-hidden="true">{}</span></a></th>', key, state, params.urlencode(), label, label, arrow)
 
 
 @register.simple_tag

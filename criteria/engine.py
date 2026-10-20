@@ -7,6 +7,12 @@ from projects.services import day
 
 # These are available source facts, not business thresholds. Rules live in the DB.
 METRICS = {
+    'backlogs': {
+        'case_service': ('دسته خدمت بکلاگ (Case Service)', 'text'),
+        'source_status': ('وضعیت بکلاگ', 'text'),
+        'sprint': ('اسپرینت بکلاگ', 'text'),
+        'release': ('ریلیز بکلاگ', 'text'),
+    },
     'planning': {
         'fix_newer': ('نگارش رفع کیس جدیدتر از نگارش فعلی مشتری است', 'bool'),
         'incident_type': ('نوع رکورد؛ Issue یا Backlog', 'text'),

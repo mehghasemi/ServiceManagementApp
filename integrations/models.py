@@ -157,6 +157,7 @@ class BacklogSnapshot(models.Model):
 
 
 class EvaluationRule(models.Model):
+    dashboard = models.CharField(max_length=20, blank=True, default='', choices=[('', 'عمومی'), ('upgrade', 'ارتقا'), ('onsite', 'مراجعه حضوری'), ('periodic', 'بازدید دوره‌ای')])
     settings = models.ForeignKey(ModuleSettings, on_delete=models.PROTECT, related_name='rules')
     code = models.CharField(max_length=80)
     label = models.CharField(max_length=200)

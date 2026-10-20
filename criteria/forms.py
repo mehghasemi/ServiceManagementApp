@@ -23,8 +23,8 @@ class RuleForm(forms.ModelForm):
 
     class Meta:
         model = EvaluationRule
-        fields = ['label', 'enabled', 'purpose', 'attention_group', 'metric', 'operator', 'priority', 'active_only', 'closure_candidate', 'grouping', 'min_count', 'action_title', 'impact']
-        labels = {'label': 'نام معیار', 'enabled': 'معیار فعال باشد', 'purpose': 'کاربرد', 'attention_group': 'گروه رسیدگی', 'metric': 'شاخص مبنا', 'operator': 'شرط مقایسه', 'priority': 'سطح اهمیت (۱ مهم‌ترین)', 'active_only': 'فقط رکوردهای جاری', 'closure_candidate': 'تطبیق این معیار، نامزد بررسی تأیید رفع باشد', 'grouping': 'مبنای تجمیع اقدام مشترک', 'min_count': 'حداقل رکورد برای پیشنهاد مشترک', 'action_title': 'عنوان اقدام پیشنهادی', 'impact': 'اثر مورد انتظار اقدام'}
+        fields = ['label', 'enabled', 'dashboard', 'purpose', 'attention_group', 'metric', 'operator', 'priority', 'active_only', 'closure_candidate', 'grouping', 'min_count', 'action_title', 'impact']
+        labels = {'dashboard': 'داشبورد مرتبط', 'label': 'نام معیار', 'enabled': 'معیار فعال باشد', 'purpose': 'کاربرد', 'attention_group': 'گروه رسیدگی', 'metric': 'شاخص مبنا', 'operator': 'شرط مقایسه', 'priority': 'سطح اهمیت (۱ مهم‌ترین)', 'active_only': 'فقط رکوردهای جاری', 'closure_candidate': 'تطبیق این معیار، نامزد بررسی تأیید رفع باشد', 'grouping': 'مبنای تجمیع اقدام مشترک', 'min_count': 'حداقل رکورد برای پیشنهاد مشترک', 'action_title': 'عنوان اقدام پیشنهادی', 'impact': 'اثر مورد انتظار اقدام'}
         help_texts = {'attention_group': 'دلیل رسیدگی را در کدام گروه مدیریتی نمایش دهیم؟ این انتخاب شرط، اهمیت یا نتیجه معیار را تغییر نمی‌دهد؛ برای فرصت اقدام مشترک کاربرد ندارد.', 'priority': 'از ۱ تا ۹؛ رتبه نمایش جداگانه و از ۱ شروع می‌شود.', 'active_only': 'پروژه جاری طبق وضعیت‌های خاتمه‌یافته تنظیمات؛ کیس جاری طبق statecode CRM. نبود داده وضعیت، نامشخص محسوب می‌شود.', 'closure_candidate': 'فقط قرینه‌ای برای بررسی انسانی است؛ هرگز مجوز بستن خودکار نیست.', 'min_count': 'حداقل تعداد کیس منطبق با همین معیار در یک گروه، از ۲ تا ۱۰۰۰۰.', 'grouping': 'شناسه دقیق مشتری لازم است؛ در حالت مشتری و برنامه، شناسه هر دو لازم است.'}
         widgets = {'impact': forms.Textarea(attrs={'rows': 3})}
 
@@ -35,6 +35,10 @@ class RuleForm(forms.ModelForm):
         self.fields['metric'].widget = forms.Select(choices=[(k, v[0]) for k, v in METRICS[module].items()])
         self.fields['operator'].widget = forms.Select(choices=list(OPERATORS.items()))
         self.fields['grouping'].widget = forms.Select(choices=[('customer_program', 'مشتری و برنامه مشترک'), ('customer', 'مشتری / مرکز مشترک')])
+        if module == 'projects':
+            self.fields['dashboard'].widget = forms.HiddenInput()
+        elif module == 'backlogs':
+            self.fields['dashboard'].choices = [('', 'عمومی'), ('onsite', 'مراجعه حضوری'), ('periodic', 'بازدید دوره‌ای')]
         if self.instance.pk:
             value = self.instance.value
             self.initial['target_value'] = '\n'.join(str(v) for v in value) if isinstance(value, list) else ('بله' if value else 'خیر') if isinstance(value, bool) else str(value)
@@ -43,6 +47,9 @@ class RuleForm(forms.ModelForm):
     def clean(self):
         data = super().clean()
         metric = data.get('metric')
+        allowed_dashboards = {'planning': ('', 'upgrade', 'onsite'), 'backlogs': ('', 'onsite', 'periodic'), 'projects': ('',)}
+        if data.get('dashboard', '') not in allowed_dashboards[self.module]:
+            self.add_error('dashboard', 'داشبورد برای این ماژول معتبر نیست.')
         kind = METRICS[self.module].get(metric, ('', None))[1]
         if not kind:
             self.add_error('metric', 'شاخص برای این زیرسیستم معتبر نیست.')

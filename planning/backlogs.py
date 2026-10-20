@@ -20,6 +20,51 @@ from integrations.client import CRMError, Cancelled
 DEFAULT_VIEW = 'همه بکلاگ های پشتیبانی اتوماسیون عمومی'
 
 
+def visit_data(records, rules, linked):
+    from collections import Counter
+    from criteria.engine import matches
+    rows = []
+    unknown = 0
+    for source in records:
+        evidence = source.get('evidence', {})
+        state = evidence.get('state')
+        facts = {**evidence, 'source_status': source.get('source_status') or None,
+                 'active': state == 0 if state is not None else None}
+        for field in ('case_service', 'sprint', 'release'):
+            facts[field] = facts.get(field) or None
+        outcomes = [matches(rule, facts) for rule in rules]
+        if True in outcomes:
+            rows.append({**source, 'ticket_count': linked.get(source['crm_id'], 0)})
+        elif None in outcomes:
+            unknown += 1
+    def chart(field):
+        counts = Counter((r.get(field) or 'نامشخص') if field == 'source_status' else (r['evidence'].get(field) or 'ثبت نشده') for r in rows)
+        peak = max(counts.values(), default=1)
+        return [{'label': key, 'count': n, 'width': round(n * 100 / peak, 1)} for key, n in counts.most_common()]
+    return rows, unknown, chart('source_status'), chart('release')
+
+
+@operator_required
+def visits(request, kind):
+    from collections import Counter
+    from criteria.engine import ensure_rules
+    rules = [r for r in ensure_rules(options()) if r.enabled and r.dashboard == kind]
+    snapshot = snapshot_for(request.user)
+    linked = Counter(str(parent) for parent in current_cases(request.user).values_list('parent_id', flat=True) if parent)
+    rows, unknown, status_chart, release_chart = visit_data(snapshot.records if snapshot else [], rules, linked)
+    total = len(rows)
+    customers = len({r['customer_id'] for r in rows if r.get('customer_id')})
+    tickets = sum(r['ticket_count'] for r in rows)
+    query = request.GET.get('q', '').strip()[:100]
+    if query:
+        rows = [r for r in rows if query.casefold() in ' '.join([r['title'], r['customer']]).casefold()]
+    rows = sort_rows(request, rows, {'title': 'title', 'customer': 'customer', 'status': 'source_status', 'service': 'evidence.case_service', 'sprint': 'evidence.sprint', 'release': 'evidence.release', 'tickets': 'ticket_count'})
+    return render(request, 'backlogs/visits.html', {'crm_mode': True, 'active_module': 'planning', 'mode': kind, 'kind': kind,
+        'title': 'مراجعه حضوری' if kind == 'onsite' else 'بازدید دوره‌ای', 'rules': rules, 'snapshot': snapshot,
+        'total': total, 'customers': customers, 'tickets': tickets, 'unknown': unknown, 'status_chart': status_chart,
+        'release_chart': release_chart, 'query': query, 'page': Paginator(rows, 20).get_page(request.GET.get('page'))})
+
+
 def options():
     obj=module_settings('backlogs')
     # Only initialize a never-configured module, never overwrite user selection.
@@ -70,7 +115,7 @@ def dashboard(request):
     service=request.GET.get('service',''); query=request.GET.get('q','').strip()[:100]
     if service: rows=[r for r in rows if r['evidence'].get('case_service','') == service]
     if query: rows=[r for r in rows if query.casefold() in ' '.join([r['number'],r['title'],r['customer']]).casefold()]
-    rows=sort_rows(request,rows,{'number':'number','title':'title','customer':'customer','status':'source_status','service':'evidence.case_service'})
+    rows=sort_rows(request,rows,{'number':'number','title':'title','customer':'customer','status':'source_status','service':'evidence.case_service','sprint':'evidence.sprint','release':'evidence.release'})
     return render(request,'backlogs/dashboard.html',{'crm_mode':True,'active_module':'planning','mode':'backlogs','options':opt,'snapshot':snapshot,'page':Paginator(rows,20).get_page(request.GET.get('page')),'services':services,'service':service,'query':query})
 
 

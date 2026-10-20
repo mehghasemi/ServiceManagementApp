@@ -24,6 +24,10 @@ def dashboard(request):
     options = module_settings('projects')
     snapshot = snapshot_for(request.user)
     rows, charts, rule_counts = dashboard_data(snapshot.records if snapshot else [], bool(snapshot and snapshot.coverage.get('notes')), options, timezone.localdate())
+    from collections import Counter
+    phases = Counter(r.get('phase') or 'نامشخص' for r in rows)
+    peak = max(phases.values(), default=1)
+    phase_chart = [{'label': label, 'count': count, 'width': round(count*100/peak, 1)} for label, count in phases.most_common()]
     total = len(rows)
     attention_count = sum(bool(r['attention_rules']) for r in rows)
     suggestions = [entry for entry in rule_counts if entry['count']]
@@ -35,7 +39,7 @@ def dashboard(request):
         rows = [r for r in rows if any(str(rule.pk) == bucket for rule in r['attention_rules'])]
     rows = sort_rows(request, rows, {'title':'title','customer':'customer','manager':'manager','status':'status','phase':'phase','end':'planned_end','note':'last_report'})
     last_job = shared_queryset(SyncJob.objects.all(), request.user).filter(scope=configuration().scope, config__module='projects').order_by('-created_at').first()
-    return render(request, 'projects/dashboard.html', {'crm_mode': True, 'mode': 'projects', 'options': options, 'snapshot': snapshot, 'last_job': last_job, 'total': total, 'attention_count': attention_count, 'rule_counts': rule_counts, 'chart_rows': charts, 'suggestions': suggestions, 'query': query, 'bucket': bucket, 'page': Paginator(rows, display_page_size(request, options.page_size)).get_page(request.GET.get('page'))})
+    return render(request, 'projects/dashboard.html', {'crm_mode': True, 'mode': 'projects', 'options': options, 'snapshot': snapshot, 'last_job': last_job, 'total': total, 'attention_count': attention_count, 'rule_counts': rule_counts, 'chart_rows': charts, 'phase_chart': phase_chart, 'suggestions': suggestions, 'query': query, 'bucket': bucket, 'page': Paginator(rows, display_page_size(request, options.page_size)).get_page(request.GET.get('page'))})
 
 
 @operator_required

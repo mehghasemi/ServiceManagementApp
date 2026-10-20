@@ -4,6 +4,16 @@ from django.db import models
 from django.utils import timezone
 
 
+class GridPreference(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    key = models.CharField(max_length=80)
+    columns = models.JSONField(default=list)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user', 'key'], name='unique_user_grid')]
+
+
 class Program(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'نیازمند تعیین تکلیف'

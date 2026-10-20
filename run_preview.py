@@ -13,7 +13,8 @@ from django.core.management import call_command
 
 if __name__ == '__main__':
     call_command('migrate', interactive=False, verbosity=0)
-    call_command('seed_demo')
+    if os.environ.get('SERVICE_ENVIRONMENT') != 'stable':
+        call_command('seed_demo')
     from django.contrib.auth import get_user_model
     from integrations.models import SyncJob
     from django.utils import timezone
