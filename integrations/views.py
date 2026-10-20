@@ -84,7 +84,9 @@ def dashboard(request):
         ids = [entry['item'].pk for entry in attention_rows if any(str(r.pk) == bucket for r in entry['rules'])]
         rows = rows.filter(pk__in=ids)
     customer_filter, parent_filter = request.GET.get('customer', '')[:50], request.GET.get('parent', '')[:50]
+    customer_label = ''
     if customer_filter:
+        customer_label = current_cases(request.user).filter(customer_id=customer_filter).values_list('customer', flat=True).first() or 'مشتری انتخاب‌شده'
         rows = rows.filter(customer_id=customer_filter)
     if parent_filter:
         rows = rows.filter(parent_id=parent_filter)
@@ -98,7 +100,7 @@ def dashboard(request):
     for case in page:
         case.review_reasons = hit_map.get(case.pk, [])
     groups = current_cases(request.user).exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
-    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'parent_filter': parent_filter, 'opportunity': opportunity, 'unlinked_count': unlinked_count, 'parent_link': parent_link, 'status_filter': status_filter, 'source_statuses': source_statuses, 'type_counts': type_counts, 'type_filter': type_filter, 'linked_programs': linked_programs, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
+    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'customer_label': customer_label, 'parent_filter': parent_filter, 'opportunity': opportunity, 'unlinked_count': unlinked_count, 'parent_link': parent_link, 'status_filter': status_filter, 'source_statuses': source_statuses, 'type_counts': type_counts, 'type_filter': type_filter, 'linked_programs': linked_programs, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
 
 @operator_required
 def settings_page(request, module=False):
@@ -138,8 +140,15 @@ def begin_job(request, kind):
         return HttpResponseNotAllowed(['POST'])
     try:
         job = start_job(request.user, kind)
+        if request.headers.get('Accept') == 'application/json':
+            from django.http import JsonResponse
+            from django.urls import reverse
+            return JsonResponse({'url': reverse('crm-job', args=[job.pk]) + '?format=json'}, status=202)
         return redirect('crm-job', pk=job.pk)
     except CRMError as error:
+        if request.headers.get('Accept') == 'application/json':
+            from django.http import JsonResponse
+            return JsonResponse({'message': str(error)}, status=409)
         messages.error(request, str(error))
         return redirect('planning-dashboard')
 

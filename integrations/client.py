@@ -124,7 +124,7 @@ try {
         available = {row['LogicalName'] for row in names}
         needed = {
             'brd_project': ('brd_projectid', 'brd_name', 'statuscode', 'statecode', 'brd_account', 'brd_customer', 'brd_projectmanager', 'brd_plannedenddate', 'brd_realenddate', 'brd_lastnotedate', 'brd_lastaction', 'brd_currentphase', 'brd_progress', 'modifiedon'),
-            'incident': ('incidentid', 'ticketnumber', 'title', 'createdon', 'modifiedon', 'statuscode', 'statecode', 'customerid', 'brd_account', 'brd_plannedcase', 'ownerid', 'brd_startplanningdate', 'brd_incidenttype', 'casetypecode'),
+            'incident': ('incidentid', 'ticketnumber', 'title', 'createdon', 'modifiedon', 'statuscode', 'statecode', 'customerid', 'brd_account', 'brd_plannedcase', 'ownerid', 'brd_startplanningdate', 'brd_incidenttype', 'casetypecode', 'brd_caseservice'),
             'annotation': ('annotationid', 'objectid', 'subject', 'notetext', 'modifiedon', 'createdon'),
             'task': ('activityid', 'regardingobjectid', 'subject', 'description', 'scheduledend', 'statecode', 'modifiedon'),
             'activitypointer': ('activityid', 'regardingobjectid', 'subject', 'description', 'scheduledend', 'statecode', 'modifiedon'),

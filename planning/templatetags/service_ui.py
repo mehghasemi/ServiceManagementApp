@@ -54,3 +54,18 @@ def customer_link(name, identifier=None):
 
 from config.dates import persian_date
 register.filter("persian_date", persian_date)
+
+
+@register.filter
+def latest_note_date(notes):
+    from django.utils.dateparse import parse_datetime
+    from datetime import timezone as dt_timezone
+    stamps=[]
+    for note in notes or []:
+        try:
+            stamp=parse_datetime(str(note.get('date') or ''))
+            if stamp:
+                if stamp.tzinfo is None: stamp=stamp.replace(tzinfo=dt_timezone.utc)
+                stamps.append(stamp)
+        except (ValueError, TypeError): pass
+    return max(stamps) if stamps else None

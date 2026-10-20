@@ -2,9 +2,13 @@
 from django.urls import path
 from criteria import views as criteria_views
 from integrations import views
-from . import upgrade_views
+from . import upgrade_views, backlogs
 
 urlpatterns = [
+    path('backlogs/', backlogs.dashboard, name='backlogs'),
+    path('backlogs/settings/', backlogs.settings_page, name='backlogs-settings'),
+    path('backlogs/jobs/<str:kind>/', backlogs.begin, name='backlogs-start'),
+    path('backlogs/<uuid:identifier>/', backlogs.detail, name='backlog-detail'),
     path('upgrades/', upgrade_views.dashboard, name='planning-upgrades'),
     path('cases/<int:identifier>/refresh/', views.refresh_record, {'module': 'planning'}, name='case-refresh'),
     path('attention/', criteria_views.attention, {'module': 'planning'}, name='planning-attention'),

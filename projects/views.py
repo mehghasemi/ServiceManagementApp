@@ -55,7 +55,14 @@ def detail(request, identifier):
 def begin_job(request, kind):
     try:
         job = start_job(request.user, kind, module='projects')
+        if request.headers.get('Accept') == 'application/json':
+            from django.http import JsonResponse
+            from django.urls import reverse
+            return JsonResponse({'url': reverse('crm-job', args=[job.pk]) + '?format=json'}, status=202)
         return redirect('crm-job', pk=job.pk)
     except CRMError as error:
+        if request.headers.get('Accept') == 'application/json':
+            from django.http import JsonResponse
+            return JsonResponse({'message': str(error)}, status=409)
         messages.error(request, str(error))
         return redirect('projects-dashboard')

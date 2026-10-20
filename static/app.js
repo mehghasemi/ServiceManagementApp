@@ -127,16 +127,19 @@ const reloadRow = rowDialog.querySelector('[data-reload]');
 let rowSyncRunning = false;
 rowDialog.querySelector('[data-close]').addEventListener('click', () => rowDialog.close());
 reloadRow.addEventListener('click', () => location.reload());
-document.querySelectorAll('.row-refresh-controls form').forEach(form => {
+document.querySelectorAll('.row-refresh-controls form, form[data-crm-sync]').forEach(form => {
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (rowSyncRunning) { rowDialog.showModal(); return; }
+    rowDialog.querySelector('h2').textContent = form.hasAttribute('data-crm-sync') ? 'دریافت اطلاعات از CRM' : 'بازخوانی همین مورد';
     rowSyncRunning = true;
     reloadRow.hidden = true;
     syncMessage.textContent = 'در حال ارسال درخواست؛ این مورد و یادداشت‌های View انتخابی دریافت می‌شوند…';
     rowDialog.showModal();
     const button = form.querySelector('button');
+    const originalLabel = button.innerHTML;
     button.disabled = true;
+    button.textContent = 'در حال دریافت…';
     try {
       const response = await fetch(form.action, {method:'POST', body:new FormData(form), headers:{Accept:'application/json'}, credentials:'same-origin'});
       if (!response.headers.get('content-type')?.includes('application/json')) throw new Error('نشست یا دسترسی معتبر نیست؛ صفحه را تازه‌سازی کنید.');
@@ -147,13 +150,14 @@ document.querySelectorAll('.row-refresh-controls form').forEach(form => {
         const status = await fetch(data.url, {headers:{Accept:'application/json'}, credentials:'same-origin',cache:'no-store'});
         if (!status.ok || !status.headers.get('content-type')?.includes('application/json')) throw new Error('پیگیری دریافت ممکن نیست؛ اطلاعات قبلی حفظ شده است.');
         const job = await status.json();
-        syncMessage.textContent = job.message;
+        syncMessage.textContent = job.message + (['queued','running'].includes(job.status) ? ' · تعداد دریافت در مرحله فعلی: ' + job.progress : '');
+        button.textContent = ['queued','running'].includes(job.status) ? 'در حال دریافت… ' + job.progress : job.status === 'success' ? 'دریافت موفق' : 'دریافت ناموفق';
         if (job.status === 'success') { reloadRow.hidden = false; return; }
         if (!['queued','running'].includes(job.status)) return;
       }
       syncMessage.textContent = 'پیگیری خودکار پایان یافت؛ دریافت ممکن است هنوز ادامه داشته باشد. فعلاً دوباره درخواست ندهید.';
     } catch(error) { syncMessage.textContent = error.message || 'ارتباط برقرار نشد؛ اطلاعات قبلی حفظ شد.'; }
-    finally { rowSyncRunning = false; button.disabled = false; }
+    finally { rowSyncRunning = false; button.disabled = false; if (button.textContent.startsWith('در حال')) button.innerHTML = originalLabel; }
   });
 });
 

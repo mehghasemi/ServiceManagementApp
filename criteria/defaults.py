@@ -1,6 +1,8 @@
 """One-time editable starting values; never override a user's saved rules."""
 def definitions(options):
     def rule(code, label, metric, operator, value, priority=3, **extra):
+        if options.module == 'planning' and extra.get('purpose', 'attention') == 'attention':
+            extra.setdefault('attention_group', {'missing_parent':'information','parent_review':'clarification','resolution_review':'clarification','stale':'information','overdue':'decision','blocked':'decision'}.get(code, ''))
         return dict(code=code, label=label, metric=metric, operator=operator, value=value, priority=priority, **extra)
     if options.module == 'projects':
         return [

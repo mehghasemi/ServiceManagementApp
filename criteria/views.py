@@ -110,8 +110,13 @@ def attention(request, module):
     snapshot = active_snapshot(request.user) if module == 'planning' else snapshot_for(request.user)
     if selected:
         rows = [r for r in rows if any(str(rule.pk) == selected for rule in r['rules'])]
+    group = request.GET.get('group', '')
+    choices = EvaluationRule._meta.get_field('attention_group').choices
+    group_counts = [{'key': key or 'ungrouped', 'label': label, 'count': sum(any(r.attention_group == key for r in row['rules']) for row in rows)} for key, label in choices if key or any(any(not r.attention_group for r in row['rules']) for row in rows)]
+    if group:
+        rows = [row for row in rows if any((r.attention_group or 'ungrouped') == group for r in row['rules'])]
     rows = sort_rows(request, rows, {'title':'item.title','number':'item.number','customer':'item.customer','priority':'priority','created':'item.evidence.created_on'})
     for entry in rows:
         for rule in entry['rules']:
             rule.condition_text = rule_description(rule, module)
-    return render(request, 'criteria/attention.html', {**context(module, 'attention'), 'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'counts': counts, 'selected': selected, 'total': total, 'source_count': len(records), 'snapshot': snapshot, 'notes_loaded': bool(snapshot and snapshot.coverage.get('notes'))})
+    return render(request, 'criteria/attention.html', {**context(module, 'attention'), 'page': Paginator(rows, 25).get_page(request.GET.get('page')), 'counts': counts, 'group_counts': group_counts, 'selected_group': group, 'selected': selected, 'total': total, 'source_count': len(records), 'snapshot': snapshot, 'notes_loaded': bool(snapshot and snapshot.coverage.get('notes'))})

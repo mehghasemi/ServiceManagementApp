@@ -19,6 +19,21 @@ class CriteriaTests(TestCase):
         self.rules = ensure_rules(self.options)
         self.options.refresh_from_db()
 
+    def test_attention_groups_are_saved_editable_and_filter_exactly(self):
+        self.cases()
+        rule = self.rule('resolution_review')
+        self.assertEqual(rule.attention_group, 'clarification')
+        page = self.client.get('/planning/attention/?group=clarification')
+        self.assertEqual(page.status_code, 200)
+        self.assertTrue(page.context['page'].paginator.count > 0)
+        for row in page.context['page']:
+            self.assertTrue(any(r.attention_group == 'clarification' for r in row['rules']))
+        rule.attention_group = 'decision'
+        rule.save()
+        page = self.client.get('/planning/attention/?group=decision')
+        self.assertTrue(page.context['page'].paginator.count > 0)
+        self.assertEqual(self.client.get('/planning/attention/?group=invalid').context['page'].paginator.count, 0)
+
     def rule(self, code):
         return self.options.rules.get(code=code)
 

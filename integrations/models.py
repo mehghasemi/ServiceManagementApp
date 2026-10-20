@@ -145,12 +145,24 @@ class ProjectSnapshot(models.Model):
     coverage = models.JSONField(default=dict)
 
 
+class BacklogSnapshot(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    scope = models.CharField(max_length=64)
+    selection_key = models.CharField(max_length=100)
+    job = models.OneToOneField(SyncJob, on_delete=models.PROTECT)
+    source_name = models.CharField(max_length=300)
+    fetched_at = models.DateTimeField(default=timezone.now)
+    records = models.JSONField(default=list)
+    coverage = models.JSONField(default=dict)
+
+
 class EvaluationRule(models.Model):
     settings = models.ForeignKey(ModuleSettings, on_delete=models.PROTECT, related_name='rules')
     code = models.CharField(max_length=80)
     label = models.CharField(max_length=200)
     enabled = models.BooleanField(default=True)
     purpose = models.CharField(max_length=20, default='attention')
+    attention_group = models.CharField(max_length=20, blank=True, default='', choices=[('', 'گروه تعیین نشده'), ('decision', 'نیازمند تصمیم شما'), ('clarification', 'نیازمند روشن‌شدن وضعیت'), ('information', 'نیازمند تکمیل اطلاعات')])
     metric = models.CharField(max_length=50)
     operator = models.CharField(max_length=20)
     value = models.JSONField(default=dict)

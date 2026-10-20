@@ -77,6 +77,13 @@ class IntegrationTests(TestCase):
         self.assertEqual(job.status, 'failed')
         self.assertEqual(case.fetched_at, stamp)
 
+    def test_full_sync_json_keeps_user_on_dashboard(self):
+        from types import SimpleNamespace
+        with patch('integrations.views.start_job', return_value=SimpleNamespace(pk=456)):
+            response=self.client.post('/crm/jobs/start/sync/',HTTP_ACCEPT='application/json')
+        self.assertEqual(response.status_code,202)
+        self.assertEqual(response.json()['url'],'/crm/jobs/456/?format=json')
+
     def test_row_refresh_json_stays_in_page(self):
         from types import SimpleNamespace
         with patch('integrations.views.start_job', return_value=SimpleNamespace(pk=123)):

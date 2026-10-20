@@ -19,7 +19,7 @@ def selection_key(options):
     return str(options.case_view_id or '') + ':' + str(options.note_view_id or '') + ':' + str(options.activity_view_id or '')
 
 def start_job(owner, kind, launch=True, module="planning", target=None):
-    if module not in ('planning', 'projects'):
+    if module not in ('planning', 'projects', 'backlogs'):
         raise CRMError('ماژول معتبر نیست.')
     if kind not in ('test', 'catalog', 'sync', 'row'):
         raise CRMError('نوع عملیات معتبر نیست.')
@@ -69,6 +69,10 @@ def run_job(pk):
             with transaction.atomic():
                 for row in catalog:
                     CRMView.objects.update_or_create(scope=job.scope, kind=row['kind'], crm_id=row['crm_id'], defaults={'name': row['name'], 'entity': row['entity'], 'refreshed_at': timezone.now()})
+        elif job.config.get('module') == 'backlogs':
+            from planning.backlogs import publish
+            publish(job, client, checkpoint)
+            return
         elif job.kind == 'row':
             from .row_refresh import refresh_row
             refresh_row(job, client, checkpoint)
@@ -79,6 +83,7 @@ def run_job(pk):
             return
         else:
             views = job.config['views']
+            checkpoint('دریافت فهرست تیکت‌ها از View انتخابی', 0)
             rows, xml, name = client.fetch_view(views['case_view'])
             notes = None
             if 'note_view' in views:
@@ -104,7 +109,7 @@ def run_job(pk):
                     ids.append(case.pk)
                 snapshot.cases.add(*ids)
                 # Scope absence never deletes a case or any local action.
-                SyncJob.objects.filter(pk=pk).update(status='success', finished_at=timezone.now(), message=f'{len(ids)} کیس یکتا از View دریافت شد', progress=len(ids))
+                SyncJob.objects.filter(pk=pk).update(status='success', finished_at=timezone.now(), message=f'{len(ids)} کیس یکتا از View دریافت شد؛ ' + (f'{len(notes)} یادداشت مرتبط دریافت شد.' if notes is not None else 'یادداشت‌ها دریافت نشدند؛ View یادداشت انتخاب نشده است.'), progress=len(ids))
             return
         SyncJob.objects.filter(pk=pk).update(status='success', finished_at=timezone.now())
     except Cancelled as error:
