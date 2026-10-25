@@ -5,10 +5,15 @@ from integrations import views as crm
 from config.views import home
 from django.conf import settings
 from django.views.generic import RedirectView
-from config.accounts import users
+from config.accounts import users, edit_user, change_password
 from config.grid_preferences import preferences
 
+from config.backups import backups
+
 urlpatterns = [
+    path('settings/backups/', backups, name='settings-backups'),
+    path('account/password/', change_password, name='change-password'),
+    path('network-users/<int:pk>/', edit_user, name='edit-user'),
     path('preferences/grids/<slug:key>/', preferences, name='grid-preferences'),
     path('network-users/', users, name='network-users'),
     path('', home, name='home'),

@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<h1>{{ heading }}</h1><section class="panel padded"><form method="post">{% csrf_token %}{% include 'crm/fields.html' %}<button class="button primary">ذخیره تغییرات</button></form></section>{% endblock %}

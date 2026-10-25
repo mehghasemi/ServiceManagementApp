@@ -48,10 +48,16 @@ def visit_data(records, rules, linked):
 def visits(request, kind):
     from collections import Counter
     from criteria.engine import ensure_rules
-    rules = [r for r in ensure_rules(options()) if r.enabled and r.dashboard == kind]
+    all_rules = [r for r in ensure_rules(options()) if r.enabled and r.dashboard == kind]
+    rules = [r for r in all_rules if r.purpose == 'attention']
     snapshot = snapshot_for(request.user)
     linked = Counter(str(parent) for parent in current_cases(request.user).values_list('parent_id', flat=True) if parent)
     rows, unknown, status_chart, release_chart = visit_data(snapshot.records if snapshot else [], rules, linked)
+    months = sorted({r['evidence'].get('release','') for r in rows if r['evidence'].get('release')})
+    month = request.GET.get('month','')[:200]
+    if month: rows = [r for r in rows if r['evidence'].get('release') == month]
+    from planning.visit_charts import visit_breakdown, city_columns
+    center_chart, city_chart = visit_breakdown(rows, all_rules)
     total = len(rows)
     customers = len({r['customer_id'] for r in rows if r.get('customer_id')})
     tickets = sum(r['ticket_count'] for r in rows)
@@ -62,7 +68,7 @@ def visits(request, kind):
     return render(request, 'backlogs/visits.html', {'crm_mode': True, 'active_module': 'planning', 'mode': kind, 'kind': kind,
         'title': 'مراجعه حضوری' if kind == 'onsite' else 'بازدید دوره‌ای', 'rules': rules, 'snapshot': snapshot,
         'total': total, 'customers': customers, 'tickets': tickets, 'unknown': unknown, 'status_chart': status_chart,
-        'release_chart': release_chart, 'query': query, 'page': Paginator(rows, 20).get_page(request.GET.get('page'))})
+        'release_chart': release_chart, 'center_chart': center_chart, 'city_chart': city_chart, 'city_columns': city_columns(city_chart), 'months': months, 'month': month, 'query': query, 'page': Paginator(rows, 20).get_page(request.GET.get('page'))})
 
 
 def options():
@@ -146,7 +152,7 @@ def settings_page(request):
                 form.add_error(None,'تنظیمات تغییر کرده؛ صفحه را تازه کنید.')
             else:
                 before=model_to_dict(locked)
-                for key in ('case_view','note_view','page_size'):setattr(locked,key,form.cleaned_data[key])
+                for key in ('case_view','note_view','page_size','auto_sync_enabled','auto_sync_minutes'):setattr(locked,key,form.cleaned_data[key])
                 locked.revision+=1;locked.save()
                 SettingsAudit.objects.create(actor=request.user,area='backlogs:settings',before=before,after=model_to_dict(locked))
                 messages.success(request,'تنظیمات بکلاگ ذخیره شد؛ برای دریافت، به‌روزرسانی را بزنید.')

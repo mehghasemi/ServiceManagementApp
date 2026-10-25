@@ -10,12 +10,7 @@ SERVICE_LAN_SUBNETS = os.environ.get('SERVICE_LAN_SUBNETS', '').split(',') if SE
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '[::1]', 'testserver'] + ([SERVICE_LAN_HOST] if SERVICE_LAN else [])
 SESSION_COOKIE_NAME = 'service_lan_session' if SERVICE_LAN else 'sessionid'
 CSRF_COOKIE_NAME = 'service_lan_csrf' if SERVICE_LAN else 'csrftoken'
-AUTH_PASSWORD_VALIDATORS = [
-    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 10}},
-    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
-]
+AUTH_PASSWORD_VALIDATORS = []
 INSTALLED_APPS = ['django.contrib.auth', 'django.contrib.contenttypes', 'django.contrib.sessions', 'django.contrib.messages', 'django.contrib.staticfiles', 'planning', 'integrations']
 MIDDLEWARE = ['django.middleware.security.SecurityMiddleware', 'planning.middleware.LocalOnlyMiddleware', 'django.contrib.sessions.middleware.SessionMiddleware', 'django.middleware.common.CommonMiddleware', 'django.middleware.csrf.CsrfViewMiddleware', 'django.contrib.auth.middleware.AuthenticationMiddleware', 'planning.middleware.NetworkIdentityMiddleware', 'django.contrib.messages.middleware.MessageMiddleware', 'django.middleware.clickjacking.XFrameOptionsMiddleware']
 ROOT_URLCONF = 'config.urls'

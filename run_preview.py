@@ -23,6 +23,9 @@ if __name__ == '__main__':
         SyncJob.objects.filter(status__in=['queued', 'running']).update(status='failed', message='دریافت محیط توسعه قطع شده یا از کپی داده آمده است؛ دوباره دریافت کنید.', finished_at=timezone.now())
     # Never interrupt recent jobs owned by the parallel LAN process.
     SyncJob.objects.filter(status__in=['queued', 'running'], created_at__lt=timezone.now()-__import__('datetime').timedelta(minutes=20)).update(status='failed', message='اجرا قطع شده بود؛ دریافت را دوباره شروع کنید. داده موفق قبلی حفظ شد.', finished_at=timezone.now())
+    if os.environ.get('SERVICE_ENVIRONMENT') == 'stable':
+        from integrations.scheduler import start_dispatcher
+        start_dispatcher()
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
     print(f'Local application: http://127.0.0.1:{port}', flush=True)
     call_command('runserver', f'127.0.0.1:{port}', use_reloader=os.environ.get('SERVICE_ENVIRONMENT') == 'development')

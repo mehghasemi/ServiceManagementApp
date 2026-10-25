@@ -11,7 +11,7 @@ class ConfirmedForm(forms.ModelForm):
 class SystemForm(ConfirmedForm):
     class Meta:
         model = SystemSettings
-        fields = ['base_url', 'organization', 'api_version', 'request_timeout', 'ai_provider', 'ai_model', 'ai_key_env']
+        fields = ['auto_sync_enabled', 'auto_sync_minutes', 'base_url', 'organization', 'api_version', 'request_timeout', 'ai_provider', 'ai_model', 'ai_key_env']
         labels = {'base_url': 'آدرس پایه CRM', 'organization': 'نام سازمان', 'api_version': 'نسخه API', 'request_timeout': 'مهلت هر درخواست (ثانیه)', 'ai_provider': 'نام سرویس AI؛ برای مراحل بعد', 'ai_model': 'نام مدل AI؛ برای مراحل بعد', 'ai_key_env': 'نام متغیر محیطی کلید AI'}
         help_texts = {'base_url': 'اتصال مشترک همه ماژول‌ها؛ فقط میزبان مجاز سرور پذیرفته می‌شود.', 'organization': 'نام سازمان در مسیر CRM؛ نمونه: Main.', 'api_version': 'نسخه Web API؛ نمونه: v9.1.', 'request_timeout': 'بین ۱۰ تا ۱۲۰ ثانیه؛ کل دریافت حداکثر ۱۵ دقیقه است.', 'ai_provider': 'صرفاً ثبت ترجیح مشترک؛ هیچ درخواست AI در این نسخه ارسال نمی‌شود.', 'ai_model': 'تنظیم مشترک آینده؛ تحلیل فعلی قواعد قطعی و قابل توضیح دارد.', 'ai_key_env': 'فقط نام متغیر، نه مقدار کلید. هیچ secret در فرم یا دیتابیس ذخیره نمی‌شود.'}
 
@@ -39,7 +39,7 @@ class ModuleForm(ConfirmedForm):
 
     class Meta:
         model = ModuleSettings
-        fields = ['case_view', 'note_view', 'activity_view', 'page_size', 'action_templates']
+        fields = ['auto_sync_enabled', 'auto_sync_minutes', 'case_view', 'note_view', 'activity_view', 'page_size', 'action_templates']
         labels = {'case_view': 'View اصلی کیس‌های برنامه‌ریزی', 'note_view': 'View شواهد یادداشت؛ اختیاری', 'activity_view': 'View فعالیت‌ها؛ اختیاری', 'stale_days': 'آستانه قدمت یادداشت (روز)', 'parent_review_statuses': 'وضعیت‌های برنامه مرتبط برای بازبینی', 'page_size': 'تعداد ردیف در صفحه'}
         help_texts = {'case_view': 'فقط Viewهای موجودیت Case؛ فیلترهای خود View حفظ می‌شوند. تا تغییر صریح، انتخاب ثابت است.', 'note_view': 'فقط یادداشت‌های این View و مرتبط با کیس‌ها یا برنامه مادر تحلیل می‌شوند؛ پوشش کامل تضمین نمی‌شود.', 'activity_view': 'فعالیت‌های همین View برای شواهد موعد و اقدام استفاده می‌شوند؛ چیزی خارج از View خوانده نمی‌شود.', 'stale_days': 'قدمت یادداشت صرفاً علامت بازبینی است، نه نبود کار. بین ۱ تا ۳۶۵ روز.', 'parent_review_statuses': 'برچسب دقیق وضعیت‌ها با ویرگول جدا شود. تطبیق فقط با داده برنامه مرتبط موجود در View انجام می‌شود.', 'page_size': 'بین ۱۰ تا ۱۰۰؛ روی دریافت CRM اثری ندارد.'}
 

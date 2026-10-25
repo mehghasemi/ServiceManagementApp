@@ -69,3 +69,20 @@ def latest_note_date(notes):
                 stamps.append(stamp)
         except (ValueError, TypeError): pass
     return max(stamps) if stamps else None
+
+
+@register.filter
+def stale_receipt(value):
+    from datetime import timedelta
+    from django.utils import timezone
+    return bool(value and timezone.now() - value > timedelta(hours=24))
+
+
+@register.simple_tag(takes_context=True)
+def dashboard_query(context, **changes):
+    query=context['request'].GET.copy()
+    query.pop('page',None)
+    for key,value in changes.items():
+        if value is None: query.pop(key,None)
+        else: query[key]=value
+    return '?' + query.urlencode() + '#case-list'

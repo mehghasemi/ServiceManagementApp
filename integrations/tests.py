@@ -23,6 +23,25 @@ class IntegrationTests(TestCase):
         self.options.case_view = view
         self.options.save()
 
+    def test_customer_dashboard_summaries_do_not_include_other_customers(self):
+        self.sync()
+        case=CRMCase.objects.get()
+        case.customer_id='aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        case.customer='Selected customer'
+        case.save()
+        other=CRMCase.objects.create(scope=case.scope,crm_id=uuid.uuid4(),customer_id='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',customer='Other customer',source_status='Other status',parent_id=str(uuid.uuid4()))
+        snapshot=PlanningSnapshot.objects.latest('pk');snapshot.cases.add(other)
+        other.fetched_at=snapshot.fetched_at;other.save()
+        response=self.client.get('/planning/',{'customer':case.customer_id})
+        self.assertEqual(response.context['total'],1)
+        self.assertEqual(response.context['linked_programs'],0)
+        self.assertEqual(sum(r['count'] for r in response.context['chart_rows']),1)
+        self.assertNotContains(response,'Other customer')
+        self.assertNotContains(response,'Other status')
+        self.assertContains(response,'customer='+case.customer_id)
+        empty=self.client.get('/planning/',{'customer':str(uuid.uuid4())})
+        self.assertEqual(empty.context['total'],0)
+
     def sync(self, rows=None):
         job = start_job(self.user, 'sync', launch=False)
         with patch('integrations.jobs.Client.fetch_view', return_value=(ROWS if rows is None else rows, XML, 'ویوی تست')):
@@ -138,7 +157,7 @@ class IntegrationTests(TestCase):
 
     def test_settings_locked_during_job(self):
         start_job(self.user, 'sync', launch=False)
-        payload = dict(base_url='https://crm.baridsoft.ir', organization='Main', api_version='v9.1', request_timeout=30, ai_provider='', ai_model='', ai_key_env='SERVICE_AI_KEY', revision=1, confirm=True)
+        payload = dict(auto_sync_enabled=True, auto_sync_minutes=60, base_url='https://crm.baridsoft.ir', organization='Main', api_version='v9.1', request_timeout=30, ai_provider='', ai_model='', ai_key_env='SERVICE_AI_KEY', revision=1, confirm=True)
         response = self.client.post('/settings/', payload)
         self.assertEqual(response.status_code, 409)
         self.config.refresh_from_db()

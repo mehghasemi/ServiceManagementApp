@@ -1,0 +1,1 @@
+<nav class="module-tabs" aria-label="تنظیمات اصلی"><a href="{% url 'system-settings' %}" {% if request.resolver_match.url_name == 'system-settings' %}aria-current="page"{% endif %}>تنظیمات عمومی</a><a href="{% url 'settings-backups' %}" {% if request.resolver_match.url_name == 'settings-backups' %}aria-current="page"{% endif %}>پشتیبان‌گیری و بازیابی</a></nav>

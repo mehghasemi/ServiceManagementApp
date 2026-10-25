@@ -50,24 +50,42 @@ def dashboard(request):
     config, options = configuration(), module_settings()
     snapshot = active_snapshot(request.user)
     last_job = shared_queryset(SyncJob.objects.all(), request.user).filter(scope=config.scope).filter(Q(config__module='planning') | ~Q(config__has_key='module')).order_by('-created_at').first()
-    rows = current_cases(request.user).annotate(open_actions=Count('local_actions', filter=open_actions_filter(request.user)))
+    dashboard_cases = current_cases(request.user)
+    customer_scope = request.GET.get('customer', '')[:50]
+    parent_scope = request.GET.get('parent', '')[:50]
+    if customer_scope:
+        dashboard_cases = dashboard_cases.filter(customer_id=customer_scope)
+    if parent_scope:
+        dashboard_cases = dashboard_cases.filter(parent_id=parent_scope)
+    from criteria.engine import ensure_rules, planning_facts, matches
+    scoped_rules = ensure_rules(options)
+    opportunity_scope = request.GET.get('opportunity', '')[:20]
+    if opportunity_scope:
+        selected = next((r for r in scoped_rules if str(r.pk) == opportunity_scope and r.enabled and r.purpose == 'opportunity'), None)
+        scoped_facts = planning_facts(dashboard_cases, request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
+        dashboard_cases = dashboard_cases.filter(pk__in=[case.pk for case, facts in scoped_facts if selected and matches(selected, facts) is True])
+    rows = dashboard_cases.annotate(open_actions=Count('local_actions', filter=open_actions_filter(request.user)))
     total = rows.count()
-    type_counts = list(current_cases(request.user).values('evidence__incident_type').annotate(count=Count('pk')).order_by('-count'))
+    type_counts = list(dashboard_cases.values('evidence__incident_type').annotate(count=Count('pk')).order_by('-count'))
     type_filter = request.GET.get('record_type', '')[:100]
-    linked_programs = current_cases(request.user).exclude(parent_id='').values('parent_id').distinct().count()
-    unlinked_count = current_cases(request.user).filter(parent_id='').count()
+    linked_programs = dashboard_cases.exclude(parent_id='').values('parent_id').distinct().count()
+    unlinked_count = dashboard_cases.filter(parent_id='').count()
     parent_link = request.GET.get('parent_link', '')
     status_filter = request.GET.get('status', '')[:100]
-    source_statuses = list(current_cases(request.user).values_list('source_status', flat=True).distinct().order_by('source_status'))
+    source_statuses = list(dashboard_cases.values_list('source_status', flat=True).distinct().order_by('source_status'))
     without_action = rows.filter(open_actions=0).count()
     from criteria.engine import ensure_rules, planning_facts, evaluate_records, matches
     rules = ensure_rules(options)
-    facts_rows = planning_facts(current_cases(request.user), request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
+    facts_rows = planning_facts(dashboard_cases, request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
     attention_rows, rule_counts = evaluate_records(facts_rows, rules)
     hit_map = {entry['item'].pk: entry['rules'] for entry in attention_rows}
-    from planning.charts import status_distribution
-    chart_rows = status_distribution(current_cases(request.user))
+    from planning.charts import status_distribution, creation_chart, status_ring
+    chart_rows = status_distribution(dashboard_cases)
     action_coverage = round((total - without_action) * 100 / total, 1) if total else None
+    visual_cases = list(dashboard_cases)
+    creation = creation_chart(visual_cases, timezone.localdate())
+    attention_creation = creation_chart([case for case in visual_cases if case.pk in hit_map], timezone.localdate())
+    unlinked_creation = creation_chart([case for case in visual_cases if not case.parent_id], timezone.localdate())
     query = request.GET.get('q', '').strip()[:100]
     bucket = request.GET.get('bucket', '')
     if parent_link == 'missing':
@@ -86,7 +104,7 @@ def dashboard(request):
     customer_filter, parent_filter = request.GET.get('customer', '')[:50], request.GET.get('parent', '')[:50]
     customer_label = ''
     if customer_filter:
-        customer_label = current_cases(request.user).filter(customer_id=customer_filter).values_list('customer', flat=True).first() or 'مشتری انتخاب‌شده'
+        customer_label = dashboard_cases.filter(customer_id=customer_filter).values_list('customer', flat=True).first() or 'مشتری انتخاب‌شده'
         rows = rows.filter(customer_id=customer_filter)
     if parent_filter:
         rows = rows.filter(parent_id=parent_filter)
@@ -99,8 +117,8 @@ def dashboard(request):
     page = Paginator(rows, display_page_size(request, options.page_size)).get_page(request.GET.get('page'))
     for case in page:
         case.review_reasons = hit_map.get(case.pk, [])
-    groups = current_cases(request.user).exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
-    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'customer_label': customer_label, 'parent_filter': parent_filter, 'opportunity': opportunity, 'unlinked_count': unlinked_count, 'parent_link': parent_link, 'status_filter': status_filter, 'source_statuses': source_statuses, 'type_counts': type_counts, 'type_filter': type_filter, 'linked_programs': linked_programs, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
+    groups = dashboard_cases.exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
+    return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'customer_label': customer_label, 'parent_filter': parent_filter, 'opportunity': opportunity, 'unlinked_count': unlinked_count, 'parent_link': parent_link, 'status_filter': status_filter, 'source_statuses': source_statuses, 'type_counts': type_counts, 'type_filter': type_filter, 'linked_programs': linked_programs, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'creation': creation, 'attention_creation': attention_creation, 'unlinked_creation': unlinked_creation, 'status_ring': status_ring(chart_rows), 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
 
 @operator_required
 def settings_page(request, module=False):

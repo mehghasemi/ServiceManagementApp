@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% load service_ui %}{% block title %}مدیریت پروژه‌ها{% endblock %}{% block content %}
 <div class="compact-toolbar dashboard-heading"><div><h1>مدیریت پروژه‌ها</h1></div></div>
-{% include 'crm/freshness.html' %}
+
 {% if not snapshot %}<div class="notice">دریافت موفقی برای View انتخابی وجود ندارد؛ <a href="{% url 'projects-settings' %}">تنظیمات پروژه‌ها</a></div>{% endif %}
 {% if last_job.status == 'failed' or last_job.status == 'running' or last_job.status == 'queued' %}<div class="notice"><a href="{% url 'crm-job' last_job.pk %}">{{ last_job.message }}</a></div>{% endif %}
 <section class="stats compact-stats"><article class="stat"><div>پروژه‌های View</div><strong>{{ total }}</strong></article><article class="stat attention"><div>نیازمند رسیدگی</div><strong>{{ attention_count }}</strong><a href="{% url 'projects-attention' %}">مشاهده و دلیل رسیدگی</a></article></section>

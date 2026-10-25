@@ -5,6 +5,8 @@ from django.utils import timezone
 
 
 class SystemSettings(models.Model):
+    auto_sync_enabled = models.BooleanField(default=True, verbose_name="دریافت خودکار فعال باشد")
+    auto_sync_minutes = models.PositiveIntegerField(default=60, choices=[(60, 'یک ساعت'), (120, 'دو ساعت'), (240, 'چهار ساعت'), (480, 'هشت ساعت'), (1440, 'یک روز')], verbose_name="فاصله دریافت خودکار پیش‌فرض")
     base_url = models.URLField(default='https://crm.baridsoft.ir')
     organization = models.CharField(max_length=80, default='Main')
     api_version = models.CharField(max_length=20, default='v9.1')
@@ -40,6 +42,9 @@ class CRMView(models.Model):
 
 
 class ModuleSettings(models.Model):
+    auto_sync_enabled = models.BooleanField(default=True, verbose_name="دریافت خودکار این ماژول فعال باشد")
+    auto_sync_minutes = models.PositiveIntegerField(default=0, choices=[(0, "از تنظیمات عمومی (پیش‌فرض یک ساعت)")] + [(60, 'یک ساعت'), (120, 'دو ساعت'), (240, 'چهار ساعت'), (480, 'هشت ساعت'), (1440, 'یک روز')], verbose_name="فاصله دریافت این ماژول")
+    last_auto_attempt = models.DateTimeField(null=True, blank=True)
     module = models.CharField(max_length=50, default='planning')
     scope = models.CharField(max_length=64)
     case_view = models.ForeignKey(CRMView, null=True, blank=True, on_delete=models.PROTECT, related_name='+')

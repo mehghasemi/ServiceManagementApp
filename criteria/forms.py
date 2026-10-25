@@ -31,7 +31,7 @@ class RuleForm(forms.ModelForm):
     def __init__(self, *args, module, **kwargs):
         self.module = module
         super().__init__(*args, **kwargs)
-        self.fields['purpose'].widget = forms.Select(choices=[('attention', 'نیازمند رسیدگی')] + ([('opportunity', 'فرصت اقدام مشترک')] if module == 'planning' else []))
+        self.fields['purpose'].widget = forms.Select(choices=[('attention', 'نیازمند رسیدگی')] + ([('opportunity', 'فرصت اقدام مشترک')] if module == 'planning' else [('completed', 'بازدید انجام‌شده'), ('pending', 'بازدید باقی‌مانده')] if module == 'backlogs' else []))
         self.fields['metric'].widget = forms.Select(choices=[(k, v[0]) for k, v in METRICS[module].items()])
         self.fields['operator'].widget = forms.Select(choices=list(OPERATORS.items()))
         self.fields['grouping'].widget = forms.Select(choices=[('customer_program', 'مشتری و برنامه مشترک'), ('customer', 'مشتری / مرکز مشترک')])
@@ -77,7 +77,7 @@ class RuleForm(forms.ModelForm):
             self.add_error('priority', 'عدد بین ۱ تا ۹ وارد کنید.')
         if not 2 <= data.get('min_count', 0) <= 10000:
             self.add_error('min_count', 'عدد بین ۲ تا ۱۰۰۰۰ وارد کنید.')
-        if data.get('purpose') not in (['attention', 'opportunity'] if self.module == 'planning' else ['attention']):
+        if data.get('purpose') not in (['attention', 'opportunity'] if self.module == 'planning' else ['attention', 'completed', 'pending'] if self.module == 'backlogs' else ['attention']):
             self.add_error('purpose', 'کاربرد معیار معتبر نیست.')
         if data.get('grouping') not in ('customer', 'customer_program'):
             self.add_error('grouping', 'مبنای گروه‌بندی معتبر نیست.')
