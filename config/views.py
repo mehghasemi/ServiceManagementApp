@@ -1,8 +1,10 @@
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 
 @login_required
 def home(request):
+    if request.session.get("dashboard_view") == "today":
+        return redirect("planning-today")
     from integrations.views import active_snapshot
     from integrations.jobs import module_settings
     return render(request, 'home.html', {'mode': 'home', 'crm_mode': True, 'snapshot':active_snapshot(request.user), 'options':module_settings()})

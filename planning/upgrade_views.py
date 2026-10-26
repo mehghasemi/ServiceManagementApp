@@ -47,15 +47,15 @@ def dashboard(request):
     snapshot=active_snapshot(request.user)
     records=planning_facts(current_cases(request.user),request.user,bool(snapshot and snapshot.coverage.get('notes')),timezone.localdate())
     rows=customer_rows(records,rule)
+    if request.GET.get('eligible')=='1':rows=[r for r in rows if r['qualifies']]
     eligible=sum(r['qualifies'] for r in rows)
     related=sum(r['count'] for r in rows)
     missing=sum(not r['version_known'] for r in rows)
     versions=Counter(r['current'] for r in rows)
     peak=max(versions.values(),default=1)
-    version_chart=[{'label':name,'count':count,'width':round(count*100/peak,1)} for name,count in versions.most_common(8)]
+    version_chart=[{'label':name,'count':count,'width':round(count*100/peak,1)} for name,count in versions.most_common()]
     top=[dict(r,width=round(r['count']*100/max(related and max(x['count'] for x in rows),1),1)) for r in rows if r['qualifies']][:6]
     total=len(rows)
-    if request.GET.get('eligible')=='1':rows=[r for r in rows if r['qualifies']]
     rows = sort_rows(request, rows, {'customer':'customer','version':'current','count':'count','programs':'programs','status':'qualifies'})
     return render(request,'crm/upgrades.html',{'crm_mode':True,'mode':'upgrades','active_module':'planning','snapshot':snapshot,
         'rules':rules,'rule':rule,'eligible':eligible,'related':related,'missing':missing,'total':total,'version_chart':version_chart,'top_customers':top,

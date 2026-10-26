@@ -2,9 +2,11 @@
 from django.urls import path
 from criteria import views as criteria_views
 from integrations import views
-from . import upgrade_views, backlogs
+from . import upgrade_views, backlogs, today
 
 urlpatterns = [
+    path('today/', today.dashboard, name='planning-today'),
+    path('view-preference/', today.preference, name='dashboard-preference'),
     path('visits/periodic/records/<uuid:identifier>/', backlogs.detail, {'module': 'periodic'}, name='periodic-detail'),
     path('visits/periodic/settings/', backlogs.settings_page, {'module': 'periodic'}, name='periodic-settings'),
     path('visits/periodic/jobs/<str:kind>/', backlogs.begin, {'module': 'periodic'}, name='periodic-start'),

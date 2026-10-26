@@ -64,6 +64,24 @@ def dashboard(request):
         selected = next((r for r in scoped_rules if str(r.pk) == opportunity_scope and r.enabled and r.purpose == 'opportunity'), None)
         scoped_facts = planning_facts(dashboard_cases, request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
         dashboard_cases = dashboard_cases.filter(pk__in=[case.pk for case, facts in scoped_facts if selected and matches(selected, facts) is True])
+    # Apply the full page scope before computing any KPI or chart.
+    source_statuses = list(dashboard_cases.values_list('source_status', flat=True).distinct().order_by('source_status'))
+    query = request.GET.get('q', '').strip()[:100]
+    status_filter = request.GET.get('status', '')[:100]
+    type_filter = request.GET.get('record_type', '')[:100]
+    parent_link = request.GET.get('parent_link', '')
+    bucket = request.GET.get('bucket', '')
+    if parent_link == 'missing': dashboard_cases = dashboard_cases.filter(parent_id='')
+    if request.GET.get('status_missing') == '1': dashboard_cases = dashboard_cases.filter(source_status='')
+    if status_filter: dashboard_cases = dashboard_cases.filter(source_status=status_filter)
+    if type_filter: dashboard_cases = dashboard_cases.filter(evidence__incident_type=type_filter)
+    if query: dashboard_cases = dashboard_cases.filter(Q(title__icontains=query) | Q(number__icontains=query) | Q(customer__icontains=query))
+    if bucket == 'without_action':
+        dashboard_cases = dashboard_cases.annotate(scope_actions=Count('local_actions', filter=open_actions_filter(request.user))).filter(scope_actions=0)
+    elif bucket:
+        from criteria.engine import evaluate_records
+        candidates, _ = evaluate_records(planning_facts(dashboard_cases, request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate()), scoped_rules)
+        dashboard_cases = dashboard_cases.filter(pk__in=[r['item'].pk for r in candidates if any(str(rule.pk)==bucket for rule in r['rules'])])
     rows = dashboard_cases.annotate(open_actions=Count('local_actions', filter=open_actions_filter(request.user)))
     total = rows.count()
     type_counts = list(dashboard_cases.values('evidence__incident_type').annotate(count=Count('pk')).order_by('-count'))
@@ -72,7 +90,6 @@ def dashboard(request):
     unlinked_count = dashboard_cases.filter(parent_id='').count()
     parent_link = request.GET.get('parent_link', '')
     status_filter = request.GET.get('status', '')[:100]
-    source_statuses = list(dashboard_cases.values_list('source_status', flat=True).distinct().order_by('source_status'))
     without_action = rows.filter(open_actions=0).count()
     from criteria.engine import ensure_rules, planning_facts, evaluate_records, matches
     rules = ensure_rules(options)
@@ -86,33 +103,9 @@ def dashboard(request):
     creation = creation_chart(visual_cases, timezone.localdate())
     attention_creation = creation_chart([case for case in visual_cases if case.pk in hit_map], timezone.localdate())
     unlinked_creation = creation_chart([case for case in visual_cases if not case.parent_id], timezone.localdate())
-    query = request.GET.get('q', '').strip()[:100]
-    bucket = request.GET.get('bucket', '')
-    if parent_link == 'missing':
-        rows = rows.filter(parent_id='')
-    if status_filter:
-        rows = rows.filter(source_status=status_filter)
-    if type_filter:
-        rows = rows.filter(evidence__incident_type=type_filter)
-    if query:
-        rows = rows.filter(Q(title__icontains=query) | Q(number__icontains=query) | Q(customer__icontains=query))
-    if bucket == 'without_action':
-        rows = rows.filter(open_actions=0)
-    elif bucket:
-        ids = [entry['item'].pk for entry in attention_rows if any(str(r.pk) == bucket for r in entry['rules'])]
-        rows = rows.filter(pk__in=ids)
-    customer_filter, parent_filter = request.GET.get('customer', '')[:50], request.GET.get('parent', '')[:50]
-    customer_label = ''
-    if customer_filter:
-        customer_label = dashboard_cases.filter(customer_id=customer_filter).values_list('customer', flat=True).first() or 'مشتری انتخاب‌شده'
-        rows = rows.filter(customer_id=customer_filter)
-    if parent_filter:
-        rows = rows.filter(parent_id=parent_filter)
-    opportunity = request.GET.get('opportunity', '')[:20]
-    if opportunity:
-        selected_rule = next((r for r in rules if str(r.pk) == opportunity and r.enabled and r.purpose == 'opportunity'), None)
-        ids = [case.pk for case, facts in facts_rows if selected_rule and matches(selected_rule, facts) is True]
-        rows = rows.filter(pk__in=ids)
+    customer_filter, parent_filter = customer_scope, parent_scope
+    customer_label = (dashboard_cases.values_list('customer', flat=True).first() or 'مشتری انتخاب‌شده') if customer_filter else ''
+    opportunity = opportunity_scope
     rows = sort_rows(request, rows.order_by('customer', 'parent_id', 'number', 'pk'), {'case':'number','title':'title','type':'evidence.incident_type','category':'evidence.case_category','customer':'customer','status':'source_status','parent':'parent_title','created':'evidence.created_on','actions':'open_actions'})
     page = Paginator(rows, display_page_size(request, options.page_size)).get_page(request.GET.get('page'))
     for case in page:
