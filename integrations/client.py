@@ -138,13 +138,13 @@ try {
             # Outer account lookups add evidence without widening the View's case membership.
             account_attrs = self.paged("EntityDefinitions(LogicalName='account')/Attributes?$select=LogicalName")
             account_fields = {r['LogicalName'] for r in account_attrs}
-            if account_fields.intersection({'brd_automationversion', 'address1_city'}):
+            if account_fields.intersection({'brd_automationversion', 'brd_city', 'address1_city'}):
                 aliases = {link.get('alias') for link in entity.iter('link-entity')}
                 for lookup in ('brd_account', 'customerid'):
                     alias = 'sma_upgrade_' + lookup
                     if lookup in available and alias not in aliases:
                         link = ET.SubElement(entity, 'link-entity', {'name': 'account', 'from': 'accountid', 'to': lookup, 'alias': alias, 'link-type': 'outer'})
-                        for field in ('brd_automationversion', 'address1_city'):
+                        for field in ('brd_automationversion', 'brd_city', 'address1_city'):
                             if field in account_fields:
                                 ET.SubElement(link, 'attribute', {'name': field})
         if view['entity'] == 'incident':
