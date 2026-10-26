@@ -16,7 +16,7 @@ def reserve_due(now=None):
         system=SystemSettings.objects.select_for_update().get(pk=configuration().pk)
         SyncJob.objects.filter(status__in=['running','queued'],created_at__lt=now-timedelta(minutes=20)).update(status='failed',finished_at=now,message='مهلت دریافت قبلی پایان یافته؛ داده موفق قبلی حفظ شد.')
         if not system.auto_sync_enabled or SyncJob.objects.filter(status__in=['running','queued']).exists(): return None
-        options=ModuleSettings.objects.filter(scope=system.scope,auto_sync_enabled=True,case_view__isnull=False,module__in=['planning','projects','backlogs']).order_by('last_auto_attempt','pk')
+        options=ModuleSettings.objects.filter(scope=system.scope,auto_sync_enabled=True,case_view__isnull=False,module__in=['planning','projects','backlogs','periodic']).order_by('last_auto_attempt','pk')
         for opt in options:
             interval=opt.auto_sync_minutes or system.auto_sync_minutes
             if interval not in (60,120,240,480,1440): continue

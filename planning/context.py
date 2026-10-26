@@ -17,11 +17,12 @@ def receipt_context(request):
     if not member(request.user): return {}
     from integrations.jobs import module_settings, configuration
     from integrations.models import SyncJob
-    module='projects' if request.path.startswith('/projects/') else 'backlogs' if request.path.startswith(('/planning/backlogs/','/planning/visits/periodic/')) else 'planning'
+    module='periodic' if request.path.startswith('/planning/visits/periodic/') else 'projects' if request.path.startswith('/projects/') else 'backlogs' if request.path.startswith(('/planning/backlogs/','/planning/visits/periodic/')) else 'planning'
     if module=='projects':
         from projects.views import snapshot_for
-    elif module=='backlogs':
-        from planning.backlogs import snapshot_for
+    elif module in ('backlogs','periodic'):
+        from planning.backlogs import snapshot_for as backlog_snapshot
+        snapshot_for = lambda user: backlog_snapshot(user, module)
     else:
         from integrations.views import active_snapshot as snapshot_for
     options=module_settings(module)

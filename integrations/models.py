@@ -42,6 +42,7 @@ class CRMView(models.Model):
 
 
 class ModuleSettings(models.Model):
+    report_scope = models.CharField(max_length=20, default="current", choices=[("current", "برنامه‌های جاری در View"), ("monthly", "عملکرد ماهانه؛ View شامل پایان‌یافته‌ها")])
     auto_sync_enabled = models.BooleanField(default=True, verbose_name="دریافت خودکار این ماژول فعال باشد")
     auto_sync_minutes = models.PositiveIntegerField(default=0, choices=[(0, "از تنظیمات عمومی (پیش‌فرض یک ساعت)")] + [(60, 'یک ساعت'), (120, 'دو ساعت'), (240, 'چهار ساعت'), (480, 'هشت ساعت'), (1440, 'یک روز')], verbose_name="فاصله دریافت این ماژول")
     last_auto_attempt = models.DateTimeField(null=True, blank=True)

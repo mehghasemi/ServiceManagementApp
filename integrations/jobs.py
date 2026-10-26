@@ -19,7 +19,7 @@ def selection_key(options):
     return str(options.case_view_id or '') + ':' + str(options.note_view_id or '') + ':' + str(options.activity_view_id or '')
 
 def start_job(owner, kind, launch=True, module="planning", target=None):
-    if module not in ('planning', 'projects', 'backlogs'):
+    if module not in ('planning', 'projects', 'backlogs', 'periodic'):
         raise CRMError('ماژول معتبر نیست.')
     if kind not in ('test', 'catalog', 'sync', 'row'):
         raise CRMError('نوع عملیات معتبر نیست.')
@@ -69,7 +69,7 @@ def run_job(pk):
             with transaction.atomic():
                 for row in catalog:
                     CRMView.objects.update_or_create(scope=job.scope, kind=row['kind'], crm_id=row['crm_id'], defaults={'name': row['name'], 'entity': row['entity'], 'refreshed_at': timezone.now()})
-        elif job.config.get('module') == 'backlogs':
+        elif job.config.get('module') in ('backlogs', 'periodic'):
             from planning.backlogs import publish
             publish(job, client, checkpoint)
             return

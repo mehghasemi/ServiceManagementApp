@@ -5,6 +5,9 @@ from integrations import views
 from . import upgrade_views, backlogs
 
 urlpatterns = [
+    path('visits/periodic/records/<uuid:identifier>/', backlogs.detail, {'module': 'periodic'}, name='periodic-detail'),
+    path('visits/periodic/settings/', backlogs.settings_page, {'module': 'periodic'}, name='periodic-settings'),
+    path('visits/periodic/jobs/<str:kind>/', backlogs.begin, {'module': 'periodic'}, name='periodic-start'),
     path('visits/onsite/', upgrade_views.onsite, name='planning-onsite'),
     path('visits/periodic/', backlogs.visits, {'kind': 'periodic'}, name='planning-periodic'),
     path('backlogs/criteria/', criteria_views.settings, {'module': 'backlogs'}, name='backlogs-criteria'),

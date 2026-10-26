@@ -20,7 +20,7 @@ from integrations.client import CRMError, Cancelled
 DEFAULT_VIEW = 'همه بکلاگ های پشتیبانی اتوماسیون عمومی'
 
 
-def visit_data(records, rules, linked):
+def visit_data(records, rules, linked, include_all=False):
     from collections import Counter
     from criteria.engine import matches
     rows = []
@@ -33,7 +33,7 @@ def visit_data(records, rules, linked):
         for field in ('case_service', 'sprint', 'release'):
             facts[field] = facts.get(field) or None
         outcomes = [matches(rule, facts) for rule in rules]
-        if True in outcomes:
+        if include_all or True in outcomes:
             rows.append({**source, 'ticket_count': linked.get(source['crm_id'], 0)})
         elif None in outcomes:
             unknown += 1
@@ -50,32 +50,42 @@ def visits(request, kind):
     from criteria.engine import ensure_rules
     all_rules = [r for r in ensure_rules(options()) if r.enabled and r.dashboard == kind]
     rules = [r for r in all_rules if r.purpose == 'attention']
-    snapshot = snapshot_for(request.user)
+    snapshot = snapshot_for(request.user, 'periodic')
     linked = Counter(str(parent) for parent in current_cases(request.user).values_list('parent_id', flat=True) if parent)
-    rows, unknown, status_chart, release_chart = visit_data(snapshot.records if snapshot else [], rules, linked)
-    months = sorted({r['evidence'].get('release','') for r in rows if r['evidence'].get('release')})
+    records = list({r['crm_id']: r for r in (snapshot.records if snapshot else [])}.values())
+    months = sorted({r['evidence'].get('release','') for r in records if r['evidence'].get('release')})
     month = request.GET.get('month','')[:200]
-    if month: rows = [r for r in rows if r['evidence'].get('release') == month]
+    city = request.GET.get('city','')[:200]
+    query = request.GET.get('q', '').strip()[:100]
+    if month: records = [r for r in records if r['evidence'].get('release') == month]
+    if city: records = [r for r in records if (r['evidence'].get('city') or 'شهر دریافت نشده') == city]
+    if query: records = [r for r in records if query.casefold() in ' '.join([r['title'], r['customer']]).casefold()]
+    # The dedicated CRM View owns membership; Case Service is often absent.
+    rows, unknown, status_chart, release_chart = visit_data(records, [], linked, include_all=True)
     from planning.visit_charts import visit_breakdown, city_columns
     center_chart, city_chart = visit_breakdown(rows, all_rules)
+    unknown = sum(item["unknown"] for item in center_chart)
+    columns = city_columns(city_chart)
+    for item in columns['bars']:
+        params = request.GET.copy()
+        params.pop('page', None)
+        params['city'] = item['label']
+        item['url'] = '?' + params.urlencode() + '#visit-list'
     total = len(rows)
     customers = len({r['customer_id'] for r in rows if r.get('customer_id')})
     tickets = sum(r['ticket_count'] for r in rows)
-    query = request.GET.get('q', '').strip()[:100]
-    if query:
-        rows = [r for r in rows if query.casefold() in ' '.join([r['title'], r['customer']]).casefold()]
     rows = sort_rows(request, rows, {'title': 'title', 'customer': 'customer', 'status': 'source_status', 'service': 'evidence.case_service', 'sprint': 'evidence.sprint', 'release': 'evidence.release', 'tickets': 'ticket_count'})
     return render(request, 'backlogs/visits.html', {'crm_mode': True, 'active_module': 'planning', 'mode': kind, 'kind': kind,
-        'title': 'مراجعه حضوری' if kind == 'onsite' else 'بازدید دوره‌ای', 'rules': rules, 'snapshot': snapshot,
+        'report_scope': options('periodic').report_scope, 'title': 'مراجعه حضوری' if kind == 'onsite' else 'بازدید دوره‌ای', 'rules': rules, 'snapshot': snapshot,
         'total': total, 'customers': customers, 'tickets': tickets, 'unknown': unknown, 'status_chart': status_chart,
-        'release_chart': release_chart, 'center_chart': center_chart, 'city_chart': city_chart, 'city_columns': city_columns(city_chart), 'months': months, 'month': month, 'query': query, 'page': Paginator(rows, 20).get_page(request.GET.get('page'))})
+        'release_chart': release_chart, 'center_chart': center_chart, 'city_chart': city_chart, 'city_columns': columns, 'city': city, 'months': months, 'month': month, 'query': query, 'page': Paginator(rows, 20).get_page(request.GET.get('page'))})
 
 
-def options():
-    obj=module_settings('backlogs')
+def options(module='backlogs'):
+    obj=module_settings(module)
     # Only initialize a never-configured module, never overwrite user selection.
     if not obj.case_view_id and obj.revision == 1:
-        choices=CRMView.objects.filter(scope=obj.scope,entity='incident',name=DEFAULT_VIEW)
+        choices=CRMView.objects.filter(scope=obj.scope,entity='incident',name=DEFAULT_VIEW if module == 'backlogs' else 'همه بکلاگ های بازدید دوره ای جاری خدمات عمومی')
         if choices.count() == 1:
             note_choices=CRMView.objects.filter(scope=obj.scope,entity='annotation',name='All Notes')
             note=note_choices.first() if note_choices.count()==1 else None
@@ -84,9 +94,9 @@ def options():
     return obj
 
 
-def snapshot_for(user):
-    opt=options()
-    return shared_queryset(BacklogSnapshot.objects.all(),user).filter(scope=opt.scope,selection_key=selection_key(opt)).order_by('-fetched_at','-pk').first()
+def snapshot_for(user, module='backlogs'):
+    opt=options(module)
+    return shared_queryset(BacklogSnapshot.objects.all(),user).filter(scope=opt.scope,selection_key=selection_key(opt),job__config__module=module).order_by('-fetched_at','-pk').first()
 
 
 def publish(job,client,checkpoint):
@@ -106,7 +116,7 @@ def publish(job,client,checkpoint):
         locked=SyncJob.objects.select_for_update().get(pk=job.pk)
         if locked.cancel_requested: raise Cancelled('دریافت لغو شد؛ داده قبلی حفظ شد.')
         if not member(job.owner) or not job.owner.is_staff: raise CRMError('مجوز دریافت معتبر نیست.')
-        opt=module_settings('backlogs')
+        opt=module_settings(job.config['module'])
         if configuration().scope != job.scope or selection_key(opt) != job.config['selection_key']:
             raise CRMError('منبع دریافت تغییر کرده؛ داده قبلی حفظ شد.')
         BacklogSnapshot.objects.create(owner=job.owner,scope=job.scope,selection_key=job.config['selection_key'],job=job,records=records,source_name=name,coverage={'notes':notes is not None})
@@ -126,8 +136,8 @@ def dashboard(request):
 
 
 @operator_required
-def detail(request,identifier):
-    snapshot=snapshot_for(request.user)
+def detail(request,identifier,module='backlogs'):
+    snapshot=snapshot_for(request.user,module)
     row=next((r for r in snapshot.records if r['crm_id']==str(identifier)),None) if snapshot else None
     if row is None:
         from django.http import Http404
@@ -137,13 +147,16 @@ def detail(request,identifier):
 
 
 @operator_required
-def settings_page(request):
+def settings_page(request, module='backlogs'):
     if settings.SERVICE_LAN and not request.user.is_superuser:
         from django.core.exceptions import PermissionDenied
         raise PermissionDenied
-    opt=options()
+    opt=options(module)
     form=ModuleForm(request.POST if request.method=='POST' else None,instance=opt,scope=opt.scope)
-    form.fields['case_view'].label='View بکلاگ‌ها'
+    form.fields['case_view'].label='View بازدید دوره‌ای' if module == 'periodic' else 'View بکلاگ‌ها'
+    if module == 'periodic':
+        from django import forms
+        form.fields['report_scope'] = forms.ChoiceField(label='دامنه گزارش', choices=ModuleSettings._meta.get_field('report_scope').choices, initial=opt.report_scope, help_text='عملکرد ماهانه فقط زمانی انتخاب شود که View شامل برنامه‌های پایان‌یافته نیز باشد؛ برنامه فیلترهای View را تغییر نمی‌دهد.')
     for field in ('activity_view','action_templates'): form.fields.pop(field,None)
     if request.method=='POST' and form.is_valid():
         with transaction.atomic():
@@ -153,20 +166,21 @@ def settings_page(request):
             else:
                 before=model_to_dict(locked)
                 for key in ('case_view','note_view','page_size','auto_sync_enabled','auto_sync_minutes'):setattr(locked,key,form.cleaned_data[key])
+                if module == 'periodic': locked.report_scope=form.cleaned_data['report_scope']
                 locked.revision+=1;locked.save()
-                SettingsAudit.objects.create(actor=request.user,area='backlogs:settings',before=before,after=model_to_dict(locked))
+                SettingsAudit.objects.create(actor=request.user,area=module+':settings',before=before,after=model_to_dict(locked))
                 messages.success(request,'تنظیمات بکلاگ ذخیره شد؛ برای دریافت، به‌روزرسانی را بزنید.')
-                return redirect('backlogs')
-    return render(request,'backlogs/settings.html',{'form':form,'crm_mode':True,'active_module':'planning','mode':'backlogs'})
+                return redirect('planning-periodic' if module == 'periodic' else 'backlogs')
+    return render(request,'backlogs/settings.html',{'source_module':module,'form':form,'crm_mode':True,'active_module':'planning','mode':'backlogs'})
 
 
 @operator_required
-def begin(request,kind):
+def begin(request,kind,module='backlogs'):
     if request.method!='POST':return HttpResponseNotAllowed(['POST'])
     if kind not in ('sync','catalog'):return JsonResponse({'message':'عملیات معتبر نیست.'},status=400)
-    options()
+    options(module)
     try:
-        job=start_job(request.user,kind,module='backlogs')
+        job=start_job(request.user,kind,module=module)
         if request.headers.get('Accept')=='application/json':return JsonResponse({'url':reverse('crm-job',args=[job.pk])+'?format=json'},status=202)
         return redirect('crm-job',pk=job.pk)
     except CRMError as error:

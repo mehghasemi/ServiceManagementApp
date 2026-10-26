@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parent
 PRIVATE = ROOT / 'private'
-SOURCE_DIRS = ('config', 'criteria', 'integrations', 'planning', 'projects', 'templates', 'static')
-SOURCE_FILES = ('runtime.py', 'manage.py', 'run_preview.py', 'run_lan.py', 'VERSION', 'CHANGELOG.json', 'requirements.txt')
+SOURCE_DIRS = ('config', 'criteria', 'integrations', 'planning', 'projects', 'templates', 'static', 'docs')
+SOURCE_FILES = ('runtime.py', 'manage.py', 'run_preview.py', 'run_lan.py', 'VERSION', 'CHANGELOG.json', 'requirements.txt', 'README.md', 'AGENTS.md')
 
 def prepare_release():
     releases = PRIVATE / 'releases'
