@@ -9,8 +9,12 @@ from config.accounts import users, edit_user, change_password
 from config.grid_preferences import preferences
 
 from config.backups import backups
+from planning import dashboard_views
 
 urlpatterns = [
+    path('dashboards/',dashboard_views.index,name='personal-dashboards'),
+    path('dashboards/<slug:key>/',dashboard_views.dashboard,name='personal-dashboard'),
+    path('preferences/dashboards/<slug:key>/',dashboard_views.layout,name='dashboard-layout'),
     path('settings/backups/', backups, name='settings-backups'),
     path('account/password/', change_password, name='change-password'),
     path('network-users/<int:pk>/', edit_user, name='edit-user'),

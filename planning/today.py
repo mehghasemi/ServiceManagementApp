@@ -11,7 +11,7 @@ from integrations.views import operator_required, active_snapshot, current_cases
 from integrations.models import CaseAction, SyncJob
 from integrations.jobs import configuration, module_settings
 from criteria.engine import ensure_rules, planning_facts, evaluate_records
-from planning.charts import status_distribution
+from planning.charts import status_distribution, creation_chart
 
 
 @login_required
@@ -62,7 +62,11 @@ def dashboard(request):
     for module,label,snap,route in [('planning','کیس‌ها',snapshot,'planning-dashboard'),('projects','پروژه‌ها',project_snapshot(request.user),'projects-dashboard'),('backlogs','بکلاگ‌ها',backlog_snapshot(request.user),'backlogs'),('periodic','بازدید دوره‌ای',backlog_snapshot(request.user,'periodic'),'planning-periodic')]:
         job=shared_queryset(SyncJob.objects.all(),request.user).filter(scope=configuration().scope,config__module=module).order_by('-created_at').first()
         sources.append({'label':label,'snapshot':snap,'url':reverse(route),'job':job})
+    from urllib.parse import urlencode
+    status_chart=status_distribution(cases)
+    for row in status_chart:
+        row['url']=reverse('planning-dashboard')+'?'+urlencode({'status':row['source_status']} if row['source_status'] else {'status_missing':'1'})
     return render(request,'planning/today.html',{'mode':'today','crm_mode':True,'snapshot':snapshot,'counts':counts,
-        'action_count':action_count,'page':Paginator(entries,25 if full else 5).get_page(request.GET.get('page')),
-        'full':full,'group':group,'queue_total':len(entries),'sources':sources,'status_chart':status_distribution(cases),'case_count':cases.count()})
+        'creation':creation_chart(cases,today),'action_count':action_count,'page':Paginator(entries,25 if full else 5).get_page(request.GET.get('page')),
+        'full':full,'group':group,'queue_total':len(entries),'sources':sources,'status_chart':status_chart,'case_count':cases.count()})
 

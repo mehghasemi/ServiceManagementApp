@@ -82,3 +82,16 @@ class Mutation(models.Model):
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     fingerprint = models.CharField(max_length=64)
     program = models.ForeignKey(Program, on_delete=models.PROTECT)
+
+
+class PersonalDashboard(models.Model):
+    """Presentation owned by one account, including in the shared LAN workspace."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    key = models.SlugField(max_length=80)
+    title = models.CharField(max_length=100, blank=True)
+    widgets = models.JSONField(default=list)
+    revision = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user', 'key'], name='unique_user_dashboard')]

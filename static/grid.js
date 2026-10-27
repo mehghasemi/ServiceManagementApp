@@ -19,7 +19,7 @@
       label: h.textContent.replace(/[↕▲▼؟]/g, '').trim()
     }]));
     if (originals.size !== headers.length || originals.has(undefined)) return;
-    const defaults = headers.map(h => ({id: h.dataset.column, width: Math.min(300, Math.max(110, Math.round(h.getBoundingClientRect().width))), visible: h.dataset.defaultHidden !== 'true'}));
+    const defaults = headers.map(h => ({id: h.dataset.column, width: Math.min(300, Math.max(110, Math.round(h.getBoundingClientRect().width || 180))), visible: h.dataset.defaultHidden !== 'true'}));
     let layout = defaults.map(c => ({...c})), pending = Promise.resolve(), timer;
     const toolbar = element('div', null, 'grid-toolbar');
     const status = element('span'); status.setAttribute('role', 'status');

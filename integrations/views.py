@@ -111,6 +111,12 @@ def dashboard(request):
     for case in page:
         case.review_reasons = hit_map.get(case.pk, [])
     groups = dashboard_cases.exclude(parent_id='').values('customer_id', 'customer', 'parent_id', 'parent_title', 'parent_status').annotate(count=Count('id')).order_by('-count')[:8]
+    groups=list(groups)
+    for group in groups:
+        params=request.GET.copy(); params.pop('page',None)
+        params['customer']=group['customer_id']; params['parent']=group['parent_id']
+        group['url']='?'+params.urlencode()+'#case-list'
+        group['label']=group['customer']+' · '+(group['parent_title'] or 'برنامه مرتبط')
     return render(request, 'crm/dashboard.html', {'mode': 'crm-planning', 'snapshot': snapshot, 'last_job': last_job, 'options': options, 'page': page, 'total': total, 'without_action': without_action,  'query': query, 'bucket': bucket, 'groups': groups, 'customer_filter': customer_filter, 'customer_label': customer_label, 'parent_filter': parent_filter, 'opportunity': opportunity, 'unlinked_count': unlinked_count, 'parent_link': parent_link, 'status_filter': status_filter, 'source_statuses': source_statuses, 'type_counts': type_counts, 'type_filter': type_filter, 'linked_programs': linked_programs, 'attention_count': len(attention_rows), 'rule_counts': rule_counts, 'crm_mode': True, 'creation': creation, 'attention_creation': attention_creation, 'unlinked_creation': unlinked_creation, 'status_ring': status_ring(chart_rows), 'chart_rows': chart_rows, 'action_coverage': action_coverage, 'with_action': total - without_action})
 
 @operator_required
@@ -236,7 +242,9 @@ def actions_page(request):
     page = Paginator(actions, 30).get_page(request.GET.get('page'))
     for action in page:
         action.in_current_view = action.case_id in active_ids
-    return render(request, 'crm/actions.html', {'page': page, 'crm_mode': True, 'mode': 'crm-actions'})
+    from collections import Counter
+    action_chart=[{'label':str(label),'count':actions.filter(status=value).count()} for value,label in CaseAction._meta.get_field('status').choices]
+    return render(request, 'crm/actions.html', {'page': page, 'action_chart':action_chart,'crm_mode': True, 'mode': 'crm-actions'})
 
 
 @operator_required
@@ -246,7 +254,9 @@ def suggestions_page(request):
     from criteria.engine import ensure_rules
     snapshot = active_snapshot(request.user)
     rows = grouped_recommendations(current_cases(request.user), request.user, timezone.localdate(), ensure_rules(options), bool(snapshot and snapshot.coverage.get('notes')))
-    return render(request, 'crm/group_recommendations.html', {'crm_mode': True, 'mode': 'planning-suggestions', 'page': Paginator(rows, 10).get_page(request.GET.get('page'))})
+    from collections import Counter
+    suggestion_chart=[{'label':title,'count':count} for title,count in Counter(row['title'] for row in rows).most_common()]
+    return render(request, 'crm/group_recommendations.html', {'crm_mode': True, 'mode': 'planning-suggestions','suggestion_chart':suggestion_chart, 'page': Paginator(rows, 10).get_page(request.GET.get('page'))})
 
 
 @operator_required

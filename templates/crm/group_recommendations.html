@@ -1,6 +1,6 @@
-{% extends 'base.html' %}{% load service_ui %}{% block content %}
+{% extends 'base.html' %}{% load service_ui dashboard_visuals %}{% block content %}
 <div class="compact-toolbar"><h1>فرصت‌های اقدام مشترک <button type="button" class="help" aria-label="راهنمای فرصت اقدام مشترک" data-help="پیشنهادها از معیارهای فعال تنظیمات ساخته می‌شوند: اهمیت انتخابی، سپس تعداد کیس منطبق و نامزد بررسی رفع، ترتیب را تعیین می‌کند. گروه‌بندی با شناسه دقیق مرکز و در صورت انتخاب، برنامه مشترک است. کیس ممکن است در دو فرصت متفاوت حضور داشته باشد؛ تعداد پیشنهادها را با هم جمع نزنید. رتبه نمایش از ۱ شروع می‌شود.">؟</button></h1><a class="small-button" href="{% url 'planning-criteria' %}">تنظیم معیارها</a></div>
-{% include 'pagination.html' with position='بالای پیشنهادها' %}
+{% distribution suggestion_chart 'فرصت‌ها به تفکیک اقدام پیشنهادی' 'columns' 'تعداد گروه‌های پیشنهادی در هر نوع اقدام؛ تعداد کیس یا تعداد قابل رفع نیست. ممکن است کیس در چند گروه حضور داشته باشد.' %}{% include 'pagination.html' with position='بالای پیشنهادها' %}
 <section class="panel opportunity-list" aria-label="پیشنهادهای اقدام مشترک">
 {% for item in page %}<article class="opportunity-row">
 <div class="opportunity-main"><h2>{{ page.start_index|add:forloop.counter0 }}. {{ item.title }} <button type="button" class="help" aria-label="راهنمای این پیشنهاد" data-help="{{ item.rule|rule_help }}">؟</button></h2><div class="opportunity-meta"><strong>{% customer_link item.customer item.customer_id %}</strong>{% if item.program %}<span>{{ item.program }}</span>{% endif %}</div></div>

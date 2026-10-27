@@ -132,7 +132,10 @@ def dashboard(request):
     if service: rows=[r for r in rows if r['evidence'].get('case_service','') == service]
     if query: rows=[r for r in rows if query.casefold() in ' '.join([r['number'],r['title'],r['customer']]).casefold()]
     rows=sort_rows(request,rows,{'number':'number','title':'title','customer':'customer','status':'source_status','service':'evidence.case_service','sprint':'evidence.sprint','release':'evidence.release'})
-    return render(request,'backlogs/dashboard.html',{'crm_mode':True,'active_module':'planning','mode':'backlogs','options':opt,'snapshot':snapshot,'page':Paginator(rows,20).get_page(request.GET.get('page')),'services':services,'service':service,'query':query})
+    from collections import Counter
+    status_chart=[{'label':key or 'نامشخص','count':count} for key,count in Counter(r.get('source_status','') for r in rows).most_common()]
+    service_chart=[{'label':key or 'دسته نامشخص','count':count} for key,count in Counter(r['evidence'].get('case_service','') for r in rows).most_common()]
+    return render(request,'backlogs/dashboard.html',{'crm_mode':True,'active_module':'planning','mode':'backlogs','status_chart':status_chart,'service_chart':service_chart,'total':len(rows),'options':opt,'snapshot':snapshot,'page':Paginator(rows,20).get_page(request.GET.get('page')),'services':services,'service':service,'query':query})
 
 
 @operator_required
