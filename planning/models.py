@@ -95,3 +95,14 @@ class PersonalDashboard(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['user', 'key'], name='unique_user_dashboard')]
+
+
+class DashboardPublication(models.Model):
+    """Published presentation only; viewers always load their own permitted data."""
+    key = models.SlugField(max_length=80, unique=True)
+    title = models.CharField(max_length=100, blank=True)
+    widgets = models.JSONField(default=list)
+    enabled = models.BooleanField(default=True)
+    revision = models.PositiveIntegerField(default=1)
+    publisher = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    updated_at = models.DateTimeField(auto_now=True)

@@ -73,3 +73,55 @@ class PersonalDashboardTests(TestCase):
         token=client.cookies['service_dev_csrf'].value
         response=client.post('/preferences/dashboards/projects/',json.dumps({'revision':0,'widgets':[self.widget()]}),content_type='application/json',HTTP_X_CSRFTOKEN=token)
         self.assertEqual(response.status_code,200)
+
+
+class SharedDashboardTests(TestCase):
+    def setUp(self):
+        self.admin=get_user_model().objects.create_user('publishing-admin',is_staff=True,is_superuser=True)
+        self.reader=get_user_model().objects.create_user('dashboard-reader',is_staff=True)
+        self.draft=PersonalDashboard.objects.create(user=self.admin,key='custom-team',title='Team dashboard',widgets=[{'id':'w-one','width':6,'height':'normal','hidden':False,'source':'case-status','kind':'ring'}])
+        self.client.force_login(self.admin)
+    def publish(self,key='custom-team',expected=0,revision=1,enabled=True):
+        return self.client.post('/preferences/dashboards/'+key+'/publish/',json.dumps({'revision':revision,'publication_revision':expected,'enabled':enabled}),content_type='application/json')
+    def test_admin_publishes_readonly_snapshot(self):
+        self.assertEqual(self.publish().status_code,200)
+        self.draft.title='Unpublished change';self.draft.save()
+        self.client.force_login(self.reader)
+        response=self.client.get('/dashboards/shared/custom-team/')
+        self.assertContains(response,'Team dashboard');self.assertNotContains(response,'Unpublished change')
+        self.assertNotContains(response,'id="dashboard-builder"')
+        self.assertContains(self.client.get('/dashboards/'),'Team dashboard')
+    @override_settings(SERVICE_LAN=True)
+    def test_staff_cannot_publish(self):
+        self.client.force_login(self.reader)
+        self.assertEqual(self.publish().status_code,403)
+    def test_builtin_inheritance_and_personal_override(self):
+        PersonalDashboard.objects.create(user=self.admin,key='projects',widgets=[{'id':'w-one','width':12,'height':'tall','hidden':False}])
+        self.assertEqual(self.publish('projects').status_code,200)
+        self.client.force_login(self.reader)
+        response=self.client.get('/preferences/dashboards/projects/').json()
+        self.assertTrue(response['inherited']);self.assertEqual(response['widgets'][0]['width'],12)
+        personal=PersonalDashboard.objects.create(user=self.reader,key='projects',widgets=[{'id':'w-one','width':4,'height':'compact','hidden':False}])
+        self.assertFalse(self.client.get('/preferences/dashboards/projects/').json()['inherited'])
+        personal.widgets=[];personal.save()
+        self.assertTrue(self.client.get('/preferences/dashboards/projects/').json()['inherited'])
+    def test_publish_concurrency_and_unpublish(self):
+        self.assertEqual(self.publish().status_code,200)
+        self.assertEqual(self.publish().status_code,409)
+        self.assertEqual(self.publish(expected=1,enabled=False).status_code,200)
+        self.client.force_login(self.reader)
+        self.assertEqual(self.client.get('/dashboards/shared/custom-team/').status_code,404)
+        self.assertNotContains(self.client.get('/dashboards/'),'Team dashboard')
+    def test_publication_uses_viewer_data_scope(self):
+        self.publish();self.client.force_login(self.reader)
+        from unittest.mock import patch
+        with patch('planning.dashboard_views.chart_data',return_value=[]) as adapter:
+            self.assertEqual(self.client.get('/dashboards/shared/custom-team/').status_code,200)
+            self.assertEqual(adapter.call_args.args[0].pk,self.reader.pk)
+    def test_stale_draft_rejected(self):
+        self.assertEqual(self.publish(revision=0).status_code,409)
+
+    @override_settings(SERVICE_LAN=False)
+    def test_existing_local_admin_contract(self):
+        self.client.force_login(self.reader)
+        self.assertTrue(self.client.get('/preferences/dashboards/projects/').json()['can_publish'])

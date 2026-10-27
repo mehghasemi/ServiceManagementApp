@@ -12,6 +12,8 @@ from config.backups import backups
 from planning import dashboard_views
 
 urlpatterns = [
+    path('dashboards/shared/<slug:key>/',dashboard_views.shared_dashboard,name='shared-dashboard'),
+    path('preferences/dashboards/<slug:key>/publish/',dashboard_views.publish,name='dashboard-publish'),
     path('dashboards/',dashboard_views.index,name='personal-dashboards'),
     path('dashboards/<slug:key>/',dashboard_views.dashboard,name='personal-dashboard'),
     path('preferences/dashboards/<slug:key>/',dashboard_views.layout,name='dashboard-layout'),

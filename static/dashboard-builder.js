@@ -8,8 +8,8 @@
   let specs=[],revision=0,editing=false,dirty=false,dragged=null;
   const make=(tag,text,cls)=>{const e=document.createElement(tag);if(text)e.textContent=text;if(cls)e.className=cls;return e;};
   const button=(text,action)=>{const b=make('button',text,'small-button');b.type='button';b.addEventListener('click',action);return b;};
-  let saved;
-  try {const response=await fetch(endpoint);if(!response.ok)return;saved=await response.json();revision=saved.revision;}catch{return;}
+  let saved,publicationRevision=0;
+  try {const response=await fetch(endpoint);if(!response.ok)return;saved=await response.json();revision=saved.revision;publicationRevision=saved.publication_revision||0;}catch{return;}
   let grid;
   if(custom){grid=host.querySelector('.personal-dashboard-grid');specs=saved.widgets;grid.querySelectorAll('[data-widget-id]').forEach(e=>elements.set(e.dataset.widgetId,e));}
   else {
@@ -81,15 +81,30 @@
   const hiddenSelect=make('select');hiddenSelect.setAttribute('aria-label','ابزارک‌های پنهان');
   function refreshHidden(){hiddenSelect.replaceChildren();const first=make('option','نمایش دوباره ابزارک پنهان…');first.value='';hiddenSelect.append(first);specs.filter(s=>s.hidden).forEach(s=>{const o=make('option',elements.get(s.id)?.querySelector('h2')?.textContent||'کارت '+s.id);o.value=s.id;hiddenSelect.append(o);});hiddenSelect.hidden=!editing||!specs.some(s=>s.hidden);}
   hiddenSelect.addEventListener('change',()=>{const spec=specs.find(s=>s.id===hiddenSelect.value);if(spec){spec.hidden=false;apply();refreshHidden();mark();}});
-  const edit=button('ویرایش چیدمان',()=>{editing=!editing;grid.classList.toggle('layout-editing',editing);edit.textContent=editing?'پایان ویرایش':'ویرایش چیدمان';edit.setAttribute('aria-pressed',editing);save.hidden=!editing;reset.hidden=!editing;refreshHidden();if(custom)host.querySelector('.builder-catalog').hidden=!editing;});edit.setAttribute('aria-pressed','false');
-  async function persist(resetAll=false){
+  const edit=button('ویرایش چیدمان',()=>{editing=!editing;grid.classList.toggle('layout-editing',editing);edit.textContent=editing?'پایان ویرایش':'ویرایش چیدمان';edit.setAttribute('aria-pressed',editing);save.hidden=!editing;reset.hidden=!editing;publishButton.hidden=!editing||!saved.can_publish;withdrawButton.hidden=!editing||!saved.can_publish||!saved.published;refreshHidden();if(custom)host.querySelector('.builder-catalog').hidden=!editing;});edit.setAttribute('aria-pressed','false');
+  async function persist(resetAll=false,reloadAfter=true){
     save.disabled=true;status.textContent='در حال ذخیره…';
     try{const csrf=document.querySelector('[name=csrfmiddlewaretoken]')?.value || decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('csrftoken='))?.split('=').slice(1).join('=')||'');
-      const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({widgets:resetAll?[]:specs,revision,title:custom?document.getElementById('personal-title').value:undefined})});if(!(response.headers.get('Content-Type')||'').includes('application/json'))throw new Error('نشست ورود یا مجوز ذخیره معتبر نیست؛ صفحه را تازه کنید و دوباره وارد شوید.');const result=await response.json();if(!response.ok)throw new Error(result.error||'ذخیره انجام نشد.');revision=result.revision;dirty=false;status.textContent='چیدمان در حساب شما ذخیره شد.';if(custom||resetAll)location.reload();
+      const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({widgets:resetAll?[]:specs,revision,title:custom?document.getElementById('personal-title').value:undefined})});if(!(response.headers.get('Content-Type')||'').includes('application/json'))throw new Error('نشست ورود یا مجوز ذخیره معتبر نیست؛ صفحه را تازه کنید و دوباره وارد شوید.');const result=await response.json();if(!response.ok)throw new Error(result.error||'ذخیره انجام نشد.');revision=result.revision;dirty=false;status.textContent='چیدمان در حساب شما ذخیره شد.';if(reloadAfter&&(custom||resetAll))location.reload();return true;
     }catch(error){status.textContent=error.message||'ارتباط برقرار نشد؛ تغییرات شما هنوز ذخیره نشده است.';}finally{save.disabled=false;}
   }
   const save=button('ذخیره چیدمان',()=>persist()),reset=button(custom?'خالی‌کردن داشبورد':'بازگشت به چیدمان پیش‌فرض',()=>{if(confirm('چیدمان این صفحه بازنشانی شود؟ داده‌های CRM تغییری نمی‌کنند.'))persist(true);});save.hidden=true;reset.hidden=true;
-  toolbar.append(edit,save,reset,hiddenSelect,status);specs.forEach(controls);refreshHidden();apply();
+  async function publication(enabled){
+    publishButton.disabled=true;withdrawButton.disabled=true;
+    try{
+      if(enabled&&!await persist(false,false))return;
+      const token=document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+      const response=await fetch(endpoint+'publish/',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':token||''},body:JSON.stringify({revision,publication_revision:publicationRevision,enabled})});
+      if(!(response.headers.get('Content-Type')||'').includes('application/json'))throw new Error('انتشار انجام نشد؛ ورود و دسترسی ادمین را بررسی کنید.');
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'انتشار انجام نشد.');
+      publicationRevision=result.publication_revision;saved.published=result.published;withdrawButton.hidden=!enabled;
+      status.textContent=enabled?'نسخه مشترک برای همکاران منتشر شد.':'نمایش مشترک لغو شد؛ پیش‌نویس شما حفظ شد.';
+      if(enabled&&custom){const link=make('a','مشاهده نسخه مشترک ←');link.href='/dashboards/shared/'+key+'/';status.append(' ',link);}
+    }catch(error){status.textContent=error.message||'انتشار انجام نشد.';}finally{publishButton.disabled=false;withdrawButton.disabled=false;}
+  }
+  const publishButton=button('انتشار برای همکاران',()=>publication(true));
+  const withdrawButton=button('لغو انتشار مشترک',()=>publication(false));publishButton.hidden=true;withdrawButton.hidden=true;
+  toolbar.append(edit,save,reset,publishButton,withdrawButton,hiddenSelect,status);specs.forEach(controls);refreshHidden();apply();if(saved.inherited)status.textContent='چیدمان مشترک ادمین فعال است.';
   if(custom){
     document.getElementById('personal-title').addEventListener('input',mark);
     document.getElementById('widget-source').addEventListener('change',e=>{const kinds=document.getElementById('widget-kind');kinds.value=e.target.value==='case-created'?'line':'ring';Array.from(kinds.options).forEach(o=>o.disabled=e.target.value==='case-created'?o.value!=='line':o.value==='line');});
