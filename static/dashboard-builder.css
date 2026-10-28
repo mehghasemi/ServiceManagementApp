@@ -15,3 +15,23 @@
 .widget-drag{touch-action:none;user-select:none}
 
 .dashboard-tile{container-type:inline-size}@container(max-width:430px){.visual-ring-layout{grid-template-columns:1fr;gap:10px;min-height:0}.visual-ring{width:130px}.visual-legend{max-height:140px}.visual-legend>div{font-size:.72rem}.visual-panel{padding:12px}.visual-ring strong{font-size:1.5rem}}
+
+/* Smaller sizes preserve existing saved proportions. */
+@media(min-width:1001px){
+.personal-dashboard-grid{grid-template-columns:repeat(36,minmax(0,1fr))}
+.dashboard-tile{grid-column:span 18}.tile-width-1{grid-column:span 4}.tile-width-2{grid-column:span 6}.tile-width-4{grid-column:span 12}.tile-width-6{grid-column:span 18}.tile-width-8{grid-column:span 24}.tile-width-12{grid-column:span 36}}
+@media(min-width:651px) and (max-width:1000px){.tile-width-1,.tile-width-2{grid-column:span 6}}
+.dashboard-tile.tile-height-mini>.panel{height:87px;min-height:0;max-height:87px;overflow:auto;padding:6px}
+.dashboard-tile.tile-height-mini>.stat{min-height:37px;padding:4px 6px;overflow:auto}
+.tile-height-mini>.stat strong{font-size:1rem}
+.tile-width-1 .widget-source-info,.tile-width-2 .widget-source-info{font-size:.65rem;padding:4px;overflow-wrap:anywhere}
+.widget-controls{max-width:100%;box-sizing:border-box}.widget-controls select{max-width:100%;min-width:0}
+
+/* Explicit vertical groups retain DOM/keyboard order and saved widths. */
+.dashboard-stack{display:flex;flex-direction:column;gap:16px;min-width:0;align-self:start}
+.dashboard-stack>.dashboard-tile{width:100%;box-sizing:border-box}
+@media(max-width:650px){.personal-dashboard-grid>.dashboard-stack{grid-column:span 12}}
+
+.visual-fill{fill:var(--tone)}.horizontal-chart{display:grid;gap:12px;padding:12px}.horizontal-chart>div{display:grid;grid-template-columns:1fr auto;gap:5px;font-size:.8rem}.horizontal-chart svg{grid-column:1/-1;width:100%;height:12px}
+
+.editable-round-chart{width:160px;height:160px;display:block;margin:auto}.widget-data{font-size:.75rem;overflow:auto;max-height:220px}.widget-data table{width:100%}

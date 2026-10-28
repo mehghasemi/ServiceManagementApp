@@ -12,7 +12,7 @@ from integrations.views import operator_required
 from config.access import member
 from config.accounts import can_manage
 from .models import PersonalDashboard, DashboardPublication
-from .dashboard_service import CATALOG, BUILTINS, chart_data
+from .dashboard_service import CATALOG, BUILTINS, chart_data, KINDS
 
 
 def validate_widgets(value, custom):
@@ -20,15 +20,23 @@ def validate_widgets(value, custom):
     ids=set()
     for widget in value:
         fields={'id','width','height','hidden'} | ({'source','kind'} if custom else set())
-        if not isinstance(widget,dict) or set(widget)!=fields: raise ValueError()
+        if not isinstance(widget,dict) or set(widget)-({'stack','split','contains','title'} if custom else {'stack','kind'})!=fields: raise ValueError()
+        if 'stack' in widget and type(widget['stack']) is not bool: raise ValueError()
         if not isinstance(widget['id'],str) or not re.fullmatch(r'w-[a-z0-9-]{1,60}',widget['id']) or widget['id'] in ids: raise ValueError()
         ids.add(widget['id'])
-        if type(widget['width']) is not int or widget['width'] not in (4,6,8,12): raise ValueError()
-        if widget['height'] not in ('compact','normal','tall') or type(widget['hidden']) is not bool: raise ValueError()
+        if type(widget['width']) is not int or widget['width'] not in (1,2,4,6,8,12): raise ValueError()
+        if widget['height'] not in ('mini','compact','normal','tall') or type(widget['hidden']) is not bool: raise ValueError()
+        if not custom and 'kind' in widget and widget['kind'] not in KINDS: raise ValueError()
         if custom:
             if widget['source'] not in CATALOG: raise ValueError()
-            allowed=('line',) if widget['source']=='case-created' else ('ring','columns')
+            allowed=KINDS+('line','area') if widget['source']=='case-created' else KINDS
             if widget['kind'] not in allowed: raise ValueError()
+            for field in ('contains','title'):
+                if field in widget and (not isinstance(widget[field],str) or len(widget[field])>150): raise ValueError()
+            if widget['source']=='case-created' and widget.get('contains'): raise ValueError()
+            split=widget.get('split','')
+            if not isinstance(split,str): raise ValueError()
+            if split and (split not in CATALOG or split=='case-created' or widget['source']=='case-created' or CATALOG[split][1]!=CATALOG[widget['source']][1]): raise ValueError()
     return value
 
 

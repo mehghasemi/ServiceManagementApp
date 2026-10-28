@@ -1,5 +1,21 @@
 /* Personal layouts; no record data is sent or stored in layout preferences. */
 (async () => {
+  function stackTiles(grid){
+    const tiles=Array.from(grid.querySelectorAll('.dashboard-tile'));
+    tiles.forEach(tile=>grid.append(tile));
+    grid.querySelectorAll('.dashboard-stack').forEach(group=>group.remove());
+    let group=null;
+    tiles.forEach(tile=>{
+      if(tile.hidden)return;
+      if(!group || tile.dataset.stack!=='true'){
+        group=document.createElement('div');
+        const width=Array.from(tile.classList).find(c=>c.startsWith('tile-width-'))||'tile-width-6';
+        group.className='dashboard-stack '+width;grid.insertBefore(group,tile);
+      }
+      group.append(tile);
+    });
+  }
+  document.querySelectorAll('.personal-dashboard-grid').forEach(stackTiles);
   const routes={'/':'home','/planning/':'planning','/planning/today/':'today','/projects/':'projects','/planning/backlogs/':'backlogs','/planning/visits/periodic/':'periodic','/planning/visits/onsite/':'onsite','/planning/upgrades/':'upgrades','/planning/suggestions/':'suggestions','/planning/actions/':'actions','/planning/attention/':'planning-attention','/projects/attention/':'projects-attention'};
   const host=document.getElementById('dashboard-builder'),custom=!!host;
   const key=custom?host.dataset.dashboardKey:routes[location.pathname];
@@ -34,7 +50,7 @@
   const toolbar=make('div',null,'builder-toolbar');grid.before(toolbar);
   const status=make('span');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   const mark=()=>{dirty=true;status.textContent='تغییرات ذخیره نشده است.';};
-  function apply(){specs.forEach((s,index)=>{const tile=elements.get(s.id);if(!tile)return;tile.className='dashboard-tile tile-width-'+s.width+' tile-height-'+s.height;tile.hidden=s.hidden;if(grid.children[index]!==tile)grid.insertBefore(tile,grid.children[index]||null);});}
+  function apply(){specs.forEach((s,index)=>{const tile=elements.get(s.id);if(!tile)return;tile.className='dashboard-tile tile-width-'+s.width+' tile-height-'+s.height;tile.hidden=s.hidden;tile.dataset.stack=String(!!s.stack);if(!custom&&s.kind)window.renderDashboardChart?.(tile,s.kind);grid.append(tile);});stackTiles(grid);}
   const move=(id,step)=>{const i=specs.findIndex(s=>s.id===id),j=i+step;if(j<0||j>=specs.length)return;[specs[i],specs[j]]=[specs[j],specs[i]];apply();mark();elements.get(id).querySelector('.widget-drag')?.focus();};
   function controls(spec){
     const tile=elements.get(spec.id);if(!tile||tile.querySelector('.widget-controls'))return;
@@ -68,12 +84,30 @@
     tile.addEventListener('drop',e=>{if(!editing||!dragged||dragged===spec.id)return;e.preventDefault();const from=specs.findIndex(s=>s.id===dragged),to=specs.findIndex(s=>s.id===spec.id);const [item]=specs.splice(from,1);specs.splice(to,0,item);tile.classList.remove('drop-target');apply();mark();});
     bar.append(drag,button('↑',()=>move(spec.id,-1)),button('↓',()=>move(spec.id,1)));
     function select(label,field,options){const wrap=make('label',label),sel=make('select');sel.setAttribute('aria-label',label);options.forEach(([value,text])=>{const o=make('option',text);o.value=value;sel.append(o);});sel.value=spec[field];sel.addEventListener('change',()=>{spec[field]=field==='width'?Number(sel.value):sel.value;apply();mark();});wrap.append(sel);bar.append(wrap);return sel;}
-    const width=select('عرض','width',[[4,'یک‌سوم'],[6,'نصف'],[8,'دوسوم'],[12,'کامل']]);
-    const height=select('ارتفاع','height',[['compact','کوتاه'],['normal','معمولی'],['tall','بلند']]);
+    const width=select('عرض','width',[[1,'یک‌نهم'],[2,'یک‌ششم'],[4,'یک‌سوم'],[6,'نصف'],[8,'دوسوم'],[12,'کامل']]);
+    const height=select('ارتفاع','height',[['mini','خیلی کوتاه'],['compact','کوتاه'],['normal','معمولی'],['tall','بلند']]);
+    const chartKinds=[['columns','ستونی'],['bars','میله‌ای افقی'],['ring','حلقه‌ای'],['pie','دایره‌ای']];
+    if(custom){
+      const sourceOptions=Array.from(document.getElementById('widget-source').options);
+      const source=select('سطر / داده','source',sourceOptions.map(o=>[o.value,o.textContent]));
+      const split=select('ستون / تفکیک','split',[['','بدون تفکیک'],...sourceOptions.filter(o=>o.value!=='case-created'&&o.dataset.module===sourceOptions.find(x=>x.value===spec.source)?.dataset.module).map(o=>[o.value,o.textContent])]);
+      if(!spec.split)split.value='';
+      const kind=select('نوع نمودار','kind',spec.source==='case-created'?[...chartKinds,['line','خطی'],['area','سطحی']]:chartKinds);
+      source.addEventListener('change',()=>{spec.split='';split.replaceChildren(new Option('بدون تفکیک',''));sourceOptions.filter(o=>spec.source!=='case-created'&&o.value!=='case-created'&&o.dataset.module===sourceOptions.find(x=>x.value===spec.source)?.dataset.module).forEach(o=>split.add(new Option(o.textContent,o.value)));spec.kind='columns';kind.replaceChildren(...(spec.source==='case-created'?[...chartKinds,['line','خطی'],['area','سطحی']]:chartKinds).map(([value,text])=>new Option(text,value)));kind.value='columns';mark();});
+      for(const [field,label] of [['title','عنوان نمودار'],['contains','فیلتر سطر (شامل)']]){const wrap=make('label',label),input=make('input');input.maxLength=150;input.value=spec[field]||'';if(field==='contains'){input.disabled=spec.source==='case-created';source.addEventListener('change',()=>{input.disabled=spec.source==='case-created';if(input.disabled){input.value='';spec.contains='';}});}input.addEventListener('change',()=>{spec[field]=input.value;mark();});wrap.append(input);bar.append(wrap);}
+    }else if(tile.querySelector('.visual-legend,.visual-columns')){
+      if(!spec.kind)spec.kind=tile.querySelector('.visual-legend')?'ring':'columns';
+      select('نوع نمودار','kind',chartKinds);
+    }
+    const stackLabel=make('label','زیر ابزارک قبلی');
+    const stackInput=make('input');stackInput.type='checkbox';stackInput.checked=!!spec.stack;
+    stackInput.addEventListener('change',()=>{spec.stack=stackInput.checked;apply();mark();});
+    stackLabel.append(stackInput);bar.append(stackLabel);
+
     bar.append(button('پنهان',()=>{spec.hidden=true;apply();refreshHidden();mark();}));if(custom)bar.append(button('حذف ابزارک',()=>{specs=specs.filter(s=>s.id!==spec.id);elements.delete(spec.id);tile.remove();refreshHidden();mark();}));tile.prepend(bar);
-    const resize=button('◲',()=>{const sizes=[4,6,8,12];spec.width=sizes[(sizes.indexOf(spec.width)+1)%4];width.value=spec.width;apply();mark();});resize.className='widget-resize';resize.setAttribute('aria-label','تغییر اندازه؛ کلیک برای عرض بعدی یا کشیدن گوشه');
+    const resize=button('◲',()=>{const sizes=[1,2,4,6,8,12];spec.width=sizes[(sizes.indexOf(spec.width)+1)%sizes.length];width.value=spec.width;apply();mark();});resize.className='widget-resize';resize.setAttribute('aria-label','تغییر اندازه؛ کلیک برای عرض بعدی یا کشیدن گوشه');
     resize.addEventListener('pointerdown',e=>{if(e.button!==0)return;const x=e.clientX,y=e.clientY,initialWidth=tile.getBoundingClientRect().width,initialHeight=tile.getBoundingClientRect().height;let moved=false;resize.setPointerCapture(e.pointerId);
-      const onMove=event=>{if(Math.abs(event.clientX-x)+Math.abs(event.clientY-y)<8)return;moved=true;const unit=grid.getBoundingClientRect().width/12,target=(initialWidth+x-event.clientX)/unit;spec.width=[4,6,8,12].reduce((a,b)=>Math.abs(b-target)<Math.abs(a-target)?b:a);spec.height=initialHeight+event.clientY-y<330?'compact':initialHeight+event.clientY-y>510?'tall':'normal';width.value=spec.width;height.value=spec.height;apply();mark();};
+      const onMove=event=>{if(Math.abs(event.clientX-x)+Math.abs(event.clientY-y)<8)return;moved=true;const unit=grid.getBoundingClientRect().width/12,target=(initialWidth+x-event.clientX)/unit;spec.width=[1,2,4,6,8,12].reduce((a,b)=>Math.abs((b===1?4/3:b)-target)<Math.abs((a===1?4/3:a)-target)?b:a);spec.height=initialHeight+event.clientY-y<170?'mini':initialHeight+event.clientY-y<330?'compact':initialHeight+event.clientY-y>510?'tall':'normal';width.value=spec.width;height.value=spec.height;apply();mark();};
       const end=()=>{resize.removeEventListener('pointermove',onMove);resize.removeEventListener('pointerup',end);resize.removeEventListener('pointercancel',end);if(moved)resize.addEventListener('click',event=>{event.stopImmediatePropagation();event.preventDefault();},{once:true,capture:true});};
       resize.addEventListener('pointermove',onMove);resize.addEventListener('pointerup',end);resize.addEventListener('pointercancel',end);
     });tile.append(resize);
@@ -107,9 +141,9 @@
   toolbar.append(edit,save,reset,publishButton,withdrawButton,hiddenSelect,status);specs.forEach(controls);refreshHidden();apply();if(saved.inherited)status.textContent='چیدمان مشترک ادمین فعال است.';
   if(custom){
     document.getElementById('personal-title').addEventListener('input',mark);
-    document.getElementById('widget-source').addEventListener('change',e=>{const kinds=document.getElementById('widget-kind');kinds.value=e.target.value==='case-created'?'line':'ring';Array.from(kinds.options).forEach(o=>o.disabled=e.target.value==='case-created'?o.value!=='line':o.value==='line');});
+    document.getElementById('widget-source').addEventListener('change',e=>{const kinds=document.getElementById('widget-kind'),temporal=e.target.value==='case-created';kinds.value='columns';const filter=document.getElementById('widget-filter');filter.disabled=temporal;if(temporal)filter.value='';Array.from(kinds.options).forEach(o=>o.disabled=!temporal&&['line','area'].includes(o.value));const split=document.getElementById('widget-split');split.replaceChildren(new Option('بدون تفکیک',''));if(!temporal)Array.from(e.target.options).filter(o=>o.dataset.module===e.target.selectedOptions[0].dataset.module&&o.value!=='case-created').forEach(o=>split.add(new Option(o.textContent,o.value)));});
     document.getElementById('widget-source').dispatchEvent(new Event('change'));
-    document.getElementById('add-widget').addEventListener('click',()=>{if(specs.length>=30){status.textContent='حداکثر ۳۰ ابزارک در هر داشبورد.';return;}const source=document.getElementById('widget-source'),kind=document.getElementById('widget-kind').value;const spec={id:'w-'+crypto.randomUUID(),source:source.value,kind,width:6,height:'normal',hidden:false};const tile=make('article',null,'dashboard-tile'),panel=make('section',null,'panel padded');tile.dataset.widgetId=spec.id;panel.append(make('h2',source.selectedOptions[0].textContent),make('p','پس از ذخیره چیدمان، اطلاعات همین منبع نمایش داده می‌شود.'));tile.append(panel);elements.set(spec.id,tile);specs.push(spec);controls(spec);apply();mark();});
+    document.getElementById('add-widget').addEventListener('click',()=>{if(specs.length>=30){status.textContent='حداکثر ۳۰ ابزارک در هر داشبورد.';return;}const source=document.getElementById('widget-source'),kind=document.getElementById('widget-kind').value;const spec={id:'w-'+crypto.randomUUID(),source:source.value,kind,split:document.getElementById('widget-split').value,title:document.getElementById('widget-title').value,contains:document.getElementById('widget-filter').value,width:6,height:'normal',hidden:false};const tile=make('article',null,'dashboard-tile'),panel=make('section',null,'panel padded');tile.dataset.widgetId=spec.id;panel.append(make('h2',source.selectedOptions[0].textContent),make('p','پس از ذخیره چیدمان، اطلاعات همین منبع نمایش داده می‌شود.'));tile.append(panel);elements.set(spec.id,tile);specs.push(spec);controls(spec);apply();mark();});
   }
   window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 })();

@@ -38,7 +38,7 @@ class PersonalDashboardTests(TestCase):
         self.assertEqual(self.post('projects',data).status_code,200)
         self.assertEqual(self.client.get('/preferences/dashboards/projects/').json()['widgets'][0]['width'],12)
     def test_validation_rejects_arbitrary_data_and_sources(self):
-        for change in [{'width':7},{'height':'9000px'},{'id':'<script>'},{'hidden':'false'}]:
+        for change in [{'stack':'true'},{'width':7},{'height':'9000px'},{'id':'<script>'},{'hidden':'false'}]:
             with self.subTest(change=change):
                 widget={**self.widget(),**change}
                 self.assertEqual(self.post('planning',{'revision':0,'widgets':[widget]}).status_code,400)
@@ -47,6 +47,16 @@ class PersonalDashboardTests(TestCase):
         self.assertEqual(self.post(row.key,{'revision':1,'widgets':[widget]}).status_code,400)
         self.assertEqual(self.post('planning',{'revision':0,'widgets':[self.widget(),self.widget()]}).status_code,400)
         self.assertEqual(self.post('unknown',{'revision':0,'widgets':[]}).status_code,404)
+    def test_mini_layout_roundtrip_preserves_existing_sizes(self):
+        widgets=[dict(self.widget(),id='w-'+str(w),width=w,height='mini' if w<4 else 'compact') for w in (1,2,4,6,8,12)]
+        self.assertEqual(self.post('projects',{'revision':0,'widgets':widgets}).status_code,200)
+        self.assertEqual(self.client.get('/preferences/dashboards/projects/').json()['widgets'],widgets)
+
+    def test_vertical_stack_saved_without_changing_legacy_widgets(self):
+        widgets=[self.widget(),dict(self.widget(),id='w-two',stack=True,width=1)]
+        self.assertEqual(self.post('projects',{'revision':0,'widgets':widgets}).status_code,200)
+        self.assertEqual(self.client.get('/preferences/dashboards/projects/').json()['widgets'],widgets)
+
     def test_reset_keeps_dashboard_and_no_data_write(self):
         self.post('projects',{'revision':0,'widgets':[self.widget()]})
         self.assertEqual(self.post('projects',{'revision':1,'widgets':[]}).status_code,200)
@@ -125,3 +135,30 @@ class SharedDashboardTests(TestCase):
     def test_existing_local_admin_contract(self):
         self.client.force_login(self.reader)
         self.assertTrue(self.client.get('/preferences/dashboards/projects/').json()['can_publish'])
+
+
+class ChartBuilderTests(TestCase):
+    def test_two_dimensions_keep_missing_and_filter(self):
+        from planning.dashboard_service import aggregate
+        records=[{'customer':'A','source_status':'Done'},{'customer':'A','source_status':'Done'},{'customer':'A','source_status':''},{'customer':'B','source_status':'Open'}]
+        rows=aggregate(records,'backlog-customer','backlog-status')
+        self.assertEqual(sum(r['count'] for r in rows),4)
+        self.assertEqual(len(rows),3)
+        self.assertTrue(any(r['series']=='نامشخص' for r in rows))
+        self.assertEqual(sum(r['count'] for r in aggregate(records,'backlog-customer','backlog-status','A')),3)
+
+    def test_chart_contract_rejects_cross_module_and_non_temporal_line(self):
+        from planning.dashboard_views import validate_widgets
+        base={'id':'w-report','width':6,'height':'normal','hidden':False,'source':'periodic-city','kind':'bars','split':'periodic-status','title':'شهر و وضعیت','contains':''}
+        self.assertEqual(validate_widgets([base],True),[base])
+        for changes in ({'split':'project-status'},{'kind':'line'},{'source':'__dict__'},{'contains':[]},{'kind':'script'}):
+            with self.subTest(changes=changes),self.assertRaises(ValueError):validate_widgets([{**base,**changes}],True)
+
+    def test_standard_distribution_types_render_safely(self):
+        from django.template import Template,Context
+        for kind in ('columns','bars','pie','ring'):
+            output=Template('{% load dashboard_visuals %}{% distribution rows title kind %}').render(Context({'rows':[{'label':'<script>bad</script>','count':4},{'label':'B','count':2}],'title':'آزمون','kind':kind}))
+            self.assertNotIn('<script>',output)
+            self.assertIn('&lt;script&gt;',output)
+        from planning.templatetags.dashboard_visuals import distribution
+        self.assertEqual(distribution([{'label':'A','count':4}],'Test','pie')['rows'][0]['share'],100)
