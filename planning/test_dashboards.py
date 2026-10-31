@@ -48,7 +48,7 @@ class PersonalDashboardTests(TestCase):
         self.assertEqual(self.post('planning',{'revision':0,'widgets':[self.widget(),self.widget()]}).status_code,400)
         self.assertEqual(self.post('unknown',{'revision':0,'widgets':[]}).status_code,404)
     def test_mini_layout_roundtrip_preserves_existing_sizes(self):
-        widgets=[dict(self.widget(),id='w-'+str(w),width=w,height='mini' if w<4 else 'compact') for w in (1,2,4,6,8,12)]
+        widgets=[dict(self.widget(),id='w-'+str(w),width=w,height='mini' if w<4 else 'compact') for w in (1,2,3,4,6,8,12)]
         self.assertEqual(self.post('projects',{'revision':0,'widgets':widgets}).status_code,200)
         self.assertEqual(self.client.get('/preferences/dashboards/projects/').json()['widgets'],widgets)
 
@@ -162,3 +162,26 @@ class ChartBuilderTests(TestCase):
             self.assertIn('&lt;script&gt;',output)
         from planning.templatetags.dashboard_visuals import distribution
         self.assertEqual(distribution([{'label':'A','count':4}],'Test','pie')['rows'][0]['share'],100)
+
+
+class DashboardReadabilityTests(TestCase):
+    def test_unknown_distribution_is_quality_message(self):
+        from django.template import Template,Context
+        output=Template('{% load dashboard_visuals %}{% distribution rows title %}').render(Context({'rows':[{'label':'نامشخص','count':12}],'title':'مرحله'}))
+        self.assertIn('12 رکورد با مقدار نامشخص',output)
+        self.assertNotIn('visual-ring-layout',output)
+
+    def test_long_bars_keep_all_values_in_disclosure(self):
+        from django.template import Template,Context
+        rows=[{'label':f'Category {i}','count':i+1} for i in range(12)]
+        output=Template('{% load dashboard_visuals %}{% distribution rows title "bars" %}').render(Context({'rows':rows,'title':'نسخه'}))
+        self.assertIn('نمایش همه 12 دسته · مجموع 78',output)
+        for row in rows:self.assertIn(row['label'],output)
+
+    def test_criterion_groups_cover_visible_fields_once(self):
+        from criteria.forms import RuleForm
+        for module in ('planning','projects','backlogs'):
+            form=RuleForm(module=module)
+            names=[field.name for _,fields in form.ui_groups for field in fields]
+            self.assertCountEqual(names,[field.name for field in form.visible_fields()])
+            self.assertEqual(len(names),len(set(names)))

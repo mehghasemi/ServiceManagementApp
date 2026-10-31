@@ -70,3 +70,15 @@ class PeriodicTests(TestCase):
         other=get_user_model().objects.create_user('other',is_staff=True)
         self.client.force_login(other)
         self.assertEqual(self.client.get('/planning/visits/periodic/records/'+row['crm_id']+'/').status_code,404)
+
+    def test_center_segment_keeps_month_and_only_its_records(self):
+        a=self.row('M1','X');b=self.row('M1','X');c=self.row('M2','X')
+        c['customer_id']=a['customer_id']
+        self.snapshot([a,b,c])
+        response=self.client.get('/planning/visits/periodic/',{'month':'M1'})
+        row=response.context['center_chart'][0]
+        url='/planning/visits/periodic/'+row['unknown_url']
+        target=self.client.get(url.split('#')[0])
+        self.assertEqual(target.context['total'],1)
+        self.assertEqual(target.context['month'],'M1')
+        self.assertEqual(target.context['unknown'],1)

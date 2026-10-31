@@ -1,3 +1,4 @@
+from .drilldown import chart_url
 """Independent View-based backlog snapshot; never overwrites ticket evidence."""
 from django.conf import settings
 from django.db import transaction
@@ -60,10 +61,21 @@ def visits(request, kind):
     if month: records = [r for r in records if r['evidence'].get('release') == month]
     if city: records = [r for r in records if (r['evidence'].get('city') or 'شهر دریافت نشده') == city]
     if query: records = [r for r in records if query.casefold() in ' '.join([r['title'], r['customer']]).casefold()]
+    if 'status' in request.GET: records=[r for r in records if (r.get('source_status') or 'نامشخص')==request.GET['status']]
+    if 'release' in request.GET: records=[r for r in records if (r['evidence'].get('release') or 'ثبت نشده')==request.GET['release']]
+    if 'center' in request.GET: records=[r for r in records if str(r.get('customer_id') or r['crm_id'])==request.GET['center']]
+    if request.GET.get('completion'):
+        from .visit_charts import visit_status
+        records=[r for r in records if visit_status(r,all_rules)==request.GET['completion']]
     # The dedicated CRM View owns membership; Case Service is often absent.
     rows, unknown, status_chart, release_chart = visit_data(records, [], linked, include_all=True)
     from planning.visit_charts import visit_breakdown, city_columns
     center_chart, city_chart = visit_breakdown(rows, all_rules)
+    for item in status_chart: item['url']=chart_url(request,status=item['label'])
+    for item in release_chart: item['url']=chart_url(request,release=item['label'])
+    for item in center_chart:
+        item['url']=chart_url(request,center=item['key'])
+        for state in ('done','pending','unknown'): item[state+'_url']=chart_url(request,center=item['key'],completion=state)
     unknown = sum(item["unknown"] for item in center_chart)
     columns = city_columns(city_chart)
     for item in columns['bars']:
@@ -129,12 +141,16 @@ def dashboard(request):
     rows=snapshot.records if snapshot else []
     services=sorted({r['evidence'].get('case_service','') for r in rows if r['evidence'].get('case_service')})
     service=request.GET.get('service',''); query=request.GET.get('q','').strip()[:100]
+    if 'status' in request.GET: rows=[r for r in rows if (r.get('source_status') or 'نامشخص')==request.GET['status']]
+    if request.GET.get('service_missing')=='1': rows=[r for r in rows if not r['evidence'].get('case_service')]
     if service: rows=[r for r in rows if r['evidence'].get('case_service','') == service]
     if query: rows=[r for r in rows if query.casefold() in ' '.join([r['number'],r['title'],r['customer']]).casefold()]
     rows=sort_rows(request,rows,{'number':'number','title':'title','customer':'customer','status':'source_status','service':'evidence.case_service','sprint':'evidence.sprint','release':'evidence.release'})
     from collections import Counter
     status_chart=[{'label':key or 'نامشخص','count':count} for key,count in Counter(r.get('source_status','') for r in rows).most_common()]
     service_chart=[{'label':key or 'دسته نامشخص','count':count} for key,count in Counter(r['evidence'].get('case_service','') for r in rows).most_common()]
+    for item in status_chart: item['url']=chart_url(request,status=item['label'])
+    for item in service_chart: item['url']=chart_url(request,service='' if item['label']=='دسته نامشخص' else item['label'],service_missing='1' if item['label']=='دسته نامشخص' else '')
     return render(request,'backlogs/dashboard.html',{'crm_mode':True,'active_module':'planning','mode':'backlogs','status_chart':status_chart,'service_chart':service_chart,'total':len(rows),'options':opt,'snapshot':snapshot,'page':Paginator(rows,20).get_page(request.GET.get('page')),'services':services,'service':service,'query':query})
 
 

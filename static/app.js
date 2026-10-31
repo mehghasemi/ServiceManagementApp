@@ -3,6 +3,7 @@ const themeButton = document.querySelector('[data-theme-toggle]');
 const refreshThemeButton = () => {
   const dark = document.documentElement.dataset.theme === 'dark';
   themeButton?.setAttribute('aria-pressed', String(dark));
+  themeButton?.setAttribute('aria-label', dark ? 'حالت روشن' : 'حالت تاریک');
   if (themeButton) themeButton.querySelector('[data-theme-label]').textContent = dark ? 'حالت روشن' : 'حالت تاریک';
 };
 refreshThemeButton();
@@ -86,6 +87,7 @@ function refreshSidebar() {
   if (sidebar) sidebar.inert = sidebarClosed;
 }
 refreshSidebar();
+window.matchMedia('(max-width: 700px)').addEventListener('change',event=>{if(event.matches){sidebarClosed=true;refreshSidebar();}});
 sidebarToggle?.addEventListener('click', () => {
   sidebarClosed = !sidebarClosed;
   refreshSidebar();

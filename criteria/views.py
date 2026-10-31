@@ -113,6 +113,8 @@ def attention(request, module):
     group = request.GET.get('group', '')
     choices = EvaluationRule._meta.get_field('attention_group').choices
     group_counts = [{'key': key or 'ungrouped', 'label': label, 'count': sum(any(r.attention_group == key for r in row['rules']) for row in rows)} for key, label in choices if key or any(any(not r.attention_group for r in row['rules']) for row in rows)]
+    from planning.drilldown import chart_url
+    for item in group_counts: item['url']=chart_url(request,group=item['key'])
     if group:
         rows = [row for row in rows if any((r.attention_group or 'ungrouped') == group for r in row['rules'])]
     rows = sort_rows(request, rows, {'title':'item.title','number':'item.number','customer':'item.customer','priority':'priority','created':'item.evidence.created_on'})

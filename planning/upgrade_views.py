@@ -1,3 +1,4 @@
+from .drilldown import chart_url
 from config.sorting import sort_rows
 from collections import Counter
 from django.shortcuts import render
@@ -26,10 +27,11 @@ def onsite(request):
             rows.append({'case': case, 'backlog': backlogs.get(str(case.parent_id), {})})
         elif None in outcomes:
             unknown += 1
+    if request.GET.get('center'): rows=[r for r in rows if str(r['case'].customer_id)==request.GET['center']]
     counts = Counter(str(r['case'].customer_id) for r in rows if r['case'].customer_id)
     names = {str(r['case'].customer_id): r['case'].customer for r in rows if r['case'].customer_id}
     peak = max(counts.values(), default=1)
-    chart = [{'label': names[key], 'count': count, 'width': round(count*100/peak, 1)} for key, count in counts.most_common(10)]
+    chart = [{'url':chart_url(request,center=key),'label': names[key], 'count': count, 'width': round(count*100/peak, 1)} for key, count in counts.most_common(10)]
     total = len(rows)
     without_parent = sum(not r['case'].parent_id for r in rows)
     rows = sort_rows(request, rows, {'title':'case.title', 'customer':'case.customer', 'status':'case.source_status', 'parent':'case.parent_title', 'sprint':'backlog.evidence.sprint', 'release':'backlog.evidence.release'})
@@ -48,13 +50,16 @@ def dashboard(request):
     records=planning_facts(current_cases(request.user),request.user,bool(snapshot and snapshot.coverage.get('notes')),timezone.localdate())
     rows=customer_rows(records,rule)
     if request.GET.get('eligible')=='1':rows=[r for r in rows if r['qualifies']]
+    if request.GET.get('center'): rows=[r for r in rows if str(r['customer_id'])==request.GET['center']]
+    if 'version' in request.GET: rows=[r for r in rows if r['current']==request.GET['version']]
     eligible=sum(r['qualifies'] for r in rows)
     related=sum(r['count'] for r in rows)
     missing=sum(not r['version_known'] for r in rows)
     versions=Counter(r['current'] for r in rows)
     peak=max(versions.values(),default=1)
-    version_chart=[{'label':name,'count':count,'width':round(count*100/peak,1)} for name,count in versions.most_common()]
+    version_chart=[{'url':chart_url(request,version=name),'label':name,'count':count,'width':round(count*100/peak,1)} for name,count in versions.most_common()]
     top=[dict(r,width=round(r['count']*100/max(related and max(x['count'] for x in rows),1),1)) for r in rows if r['qualifies']][:6]
+    for item in top: item['url']=chart_url(request,center=item['customer_id'])
     total=len(rows)
     rows = sort_rows(request, rows, {'customer':'customer','version':'current','count':'count','programs':'programs','status':'qualifies'})
     return render(request,'crm/upgrades.html',{'crm_mode':True,'mode':'upgrades','active_module':'planning','snapshot':snapshot,

@@ -14,3 +14,27 @@
 - Local preview and read-only CRM View integration are implemented. Read docs/crm-planning.md for current scope and docs/preview.md for the earlier synthetic prototype. Authenticated limited LAN pilot is implemented in run_lan.py; see docs/network.md. Never expose passwordless run_preview.py to the LAN. Team scoping, PostgreSQL and HTTPS remain pending. CRM records and local actions stay under ignored private/.
 
 - Develop using runtime.py development (isolated DB/port). Never edit private/releases or stop the user's stable server for development. Preparing a release does not activate it; see docs/development-runtime.md.
+
+## Project UI guidance
+
+- For UI work, read [the design system](docs/design-system.md) and the affected feature specification. Inspect the current template, CSS cascade and JavaScript before editing. README.md and current feature specifications describe implementation; docs/design-v1.md also contains historical proposals, not completed features.
+- Keep the existing Django templates, plain JavaScript, local CSS and local fonts. Do not introduce a frontend framework, CDN or build pipeline solely to restyle a page.
+- Use the relevant repository skill; paths are relative to this repository, not a personal skills installation:
+  - [.agents/skills/service-interface-design/SKILL.md](.agents/skills/service-interface-design/SKILL.md): page composition, components, typography, themes and responsive layouts.
+  - [.agents/skills/service-data-visualization/SKILL.md](.agents/skills/service-data-visualization/SKILL.md): charts, KPI meaning, source coverage and drill-downs.
+  - [.agents/skills/service-interface-review/SKILL.md](.agents/skills/service-interface-review/SKILL.md): keyboard, RTL, help, states and visual regression verification.
+- Reuse existing semantic tokens and shared components. Keep light/dark themes, saved grid/dashboard layouts, source identity, permissions and filter scope intact. New visual colors must not introduce evaluation rules.
+- Use the targeted checks and manual acceptance matrix in docs/design-system.md. Report actual results and remaining gaps; passing template tests does not establish browser accessibility.
+- Setup and invocation examples are in [docs/codex-project-guide.md](docs/codex-project-guide.md).
+
+### Focused design skills
+
+Select the smallest relevant skill set; do not load every UI skill for every change. The existing service-* skills remain valid implementation guides. These focused skills share docs/design-system.md rather than defining competing standards:
+
+- [.agents/skills/enterprise-ui-design/SKILL.md](.agents/skills/enterprise-ui-design/SKILL.md): enterprise page hierarchy, shared components and interaction states.
+- [.agents/skills/dashboard-design/SKILL.md](.agents/skills/dashboard-design/SKILL.md): dashboard composition and chart selection.
+- [.agents/skills/persian-rtl/SKILL.md](.agents/skills/persian-rtl/SKILL.md): Persian typography, bidirectional content, dates and RTL interaction.
+- [.agents/skills/data-table-design/SKILL.md](.agents/skills/data-table-design/SKILL.md): dense tables, column preferences, sorting and pagination.
+- [.agents/skills/ui-quality-audit/SKILL.md](.agents/skills/ui-quality-audit/SKILL.md): evidence-based UI acceptance and regression review.
+
+Design-system targets are acceptance requirements for affected work, not proof that every existing page already complies. Documentation or skill installation alone does not authorize page redesign or production activation.

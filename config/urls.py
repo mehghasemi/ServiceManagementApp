@@ -1,3 +1,4 @@
+from planning import drilldown
 from django.urls import path, include
 from django.contrib.staticfiles.views import serve
 from planning import views
@@ -12,6 +13,7 @@ from config.backups import backups
 from planning import dashboard_views
 
 urlpatterns = [
+    path('chart-records/', drilldown.records, name='chart-records'),
     path('dashboards/shared/<slug:key>/',dashboard_views.shared_dashboard,name='shared-dashboard'),
     path('preferences/dashboards/<slug:key>/publish/',dashboard_views.publish,name='dashboard-publish'),
     path('dashboards/',dashboard_views.index,name='personal-dashboards'),

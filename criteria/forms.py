@@ -44,6 +44,11 @@ class RuleForm(forms.ModelForm):
             self.initial['target_value'] = '\n'.join(str(v) for v in value) if isinstance(value, list) else ('بله' if value else 'خیر') if isinstance(value, bool) else str(value)
             self.initial['revision'] = self.instance.revision
 
+    @property
+    def ui_groups(self):
+        groups=[('هدف معیار',('label','enabled','dashboard','purpose','attention_group')),('شرط بررسی',('metric','operator','target_value','priority','active_only','closure_candidate')),('اقدام پیشنهادی',('grouping','min_count','action_title','impact')),('تأیید',('confirm',))]
+        return [(title,[self[name] for name in names if not self[name].is_hidden]) for title,names in groups]
+
     def clean(self):
         data = super().clean()
         metric = data.get('metric')

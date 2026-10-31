@@ -1,3 +1,4 @@
+from planning.drilldown import chart_url
 from config.sorting import sort_rows
 from config.pagination import display_page_size
 from django.core.paginator import Paginator
@@ -30,11 +31,15 @@ def dashboard(request):
         rows = [r for r in rows if query.casefold() in ' '.join([r['title'], r['customer'], r['manager']]).casefold()]
     if bucket:
         rows = [r for r in rows if any(str(rule.pk) == bucket for rule in r['attention_rules'])]
+    for field in ('status','phase'):
+        if field in request.GET: rows=[r for r in rows if (r.get(field) or 'نامشخص')==request.GET[field]]
     rows, charts, rule_counts = dashboard_data(rows, bool(snapshot and snapshot.coverage.get('notes')), options, timezone.localdate())
     from collections import Counter
     phases = Counter(r.get('phase') or 'نامشخص' for r in rows)
     peak = max(phases.values(), default=1)
     phase_chart = [{'label': label, 'count': count, 'width': round(count*100/peak, 1)} for label, count in phases.most_common()]
+    for item in charts: item['url']=chart_url(request,status=item['label'])
+    for item in phase_chart: item['url']=chart_url(request,phase=item['label'])
     total = len(rows)
     attention_count = sum(bool(r['attention_rules']) for r in rows)
     suggestions = [entry for entry in rule_counts if entry['count']]

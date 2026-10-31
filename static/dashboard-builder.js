@@ -1,8 +1,22 @@
 /* Personal layouts; no record data is sent or stored in layout preferences. */
 (async () => {
+  function summarizeTile(tile){
+    const panel=tile.querySelector(':scope > .panel');if(!panel)return;
+    let summary=tile.querySelector(':scope > .widget-summary');
+    if(!summary){
+      summary=document.createElement('section');summary.className='widget-summary';
+      const title=document.createElement('h2');title.textContent=panel.querySelector('h2')?.textContent||'نمودار';summary.append(title);
+      const preview=document.createElement('div');preview.className='widget-summary-preview';preview.setAttribute('aria-hidden','true');summary.append(preview);
+      const open=document.createElement('button');open.type='button';open.textContent='نمای کامل';open.setAttribute('aria-label','نمای کامل '+title.textContent);
+      open.addEventListener('click',()=>{const dialog=document.createElement('dialog');dialog.className='widget-expanded';dialog.setAttribute('aria-label',title.textContent);const close=document.createElement('button');close.type='button';close.className='widget-expanded-close';close.textContent='بستن نمای کامل';close.addEventListener('click',()=>dialog.close());dialog.append(close,panel);document.body.append(dialog);dialog.addEventListener('close',()=>{summary.after(panel);dialog.remove();open.focus();},{once:true});dialog.showModal();});summary.append(open);panel.before(summary);
+    }
+    const preview=summary.querySelector('.widget-summary-preview');preview.replaceChildren();
+    const graphic=panel.querySelector('svg');if(graphic){const clone=graphic.cloneNode(true);clone.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));clone.querySelectorAll('polygon').forEach(e=>{e.setAttribute('fill','currentColor');e.setAttribute('opacity','.2');});preview.append(clone);}
+    tile.classList.toggle('tile-summary-mode',tile.classList.contains('tile-height-mini')||tile.classList.contains('tile-width-1')||tile.classList.contains('tile-width-2'));
+  }
   function stackTiles(grid){
     const tiles=Array.from(grid.querySelectorAll('.dashboard-tile'));
-    tiles.forEach(tile=>grid.append(tile));
+    tiles.forEach(tile=>{grid.append(tile);summarizeTile(tile);});
     grid.querySelectorAll('.dashboard-stack').forEach(group=>group.remove());
     let group=null;
     tiles.forEach(tile=>{
@@ -35,19 +49,23 @@
     const first=candidates[0];let anchor=first;while(anchor.parentElement && anchor.parentElement.id!=='main')anchor=anchor.parentElement;
     anchor.before(grid);
     const parents=new Set();
+    const statCount=candidates.filter(p=>p.classList.contains('stat')).length;
+    const statWidth=statCount===4?3:statCount===2?6:4;
     candidates.forEach((panel,index)=>{
       const title=(panel.querySelector('h2')||panel.firstElementChild)?.textContent.trim() || 'ابزارک';
       let hash=2166136261;for(const c of title)hash=Math.imul(hash^c.charCodeAt(0),16777619);
       let id='w-'+(hash>>>0).toString(16);if(elements.has(id))id+='-'+index;
       const tile=make('article',null,'dashboard-tile');tile.dataset.widgetId=id;
       parents.add(panel.parentElement);tile.append(panel);grid.append(tile);elements.set(id,tile);
-      specs.push({id,width:panel.classList.contains('stat')?4:6,height:'normal',hidden:false});
+      specs.push({id,width:panel.classList.contains('stat')?statWidth:6,height:'normal',hidden:false});
     });
     parents.forEach(p=>{if(!p.children.length)p.hidden=true;});
     const defaults=new Map(specs.map(s=>[s.id,s]));
     specs=[...saved.widgets.filter(s=>defaults.has(s.id)),...specs.filter(s=>!saved.widgets.some(x=>x.id===s.id))];
   }
-  const toolbar=make('div',null,'builder-toolbar');grid.before(toolbar);
+  const toolbar=make('div',null,'builder-toolbar');
+  const heading=document.querySelector('#main>.compact-toolbar,#main>.page-heading');
+  if(heading&&!custom){heading.classList.add('dashboard-header');heading.append(toolbar);}else grid.before(toolbar);
   const status=make('span');status.setAttribute('role','status');status.setAttribute('aria-live','polite');
   const mark=()=>{dirty=true;status.textContent='تغییرات ذخیره نشده است.';};
   function apply(){specs.forEach((s,index)=>{const tile=elements.get(s.id);if(!tile)return;tile.className='dashboard-tile tile-width-'+s.width+' tile-height-'+s.height;tile.hidden=s.hidden;tile.dataset.stack=String(!!s.stack);if(!custom&&s.kind)window.renderDashboardChart?.(tile,s.kind);grid.append(tile);});stackTiles(grid);}
@@ -84,10 +102,13 @@
     tile.addEventListener('drop',e=>{if(!editing||!dragged||dragged===spec.id)return;e.preventDefault();const from=specs.findIndex(s=>s.id===dragged),to=specs.findIndex(s=>s.id===spec.id);const [item]=specs.splice(from,1);specs.splice(to,0,item);tile.classList.remove('drop-target');apply();mark();});
     bar.append(drag,button('↑',()=>move(spec.id,-1)),button('↓',()=>move(spec.id,1)));
     function select(label,field,options){const wrap=make('label',label),sel=make('select');sel.setAttribute('aria-label',label);options.forEach(([value,text])=>{const o=make('option',text);o.value=value;sel.append(o);});sel.value=spec[field];sel.addEventListener('change',()=>{spec[field]=field==='width'?Number(sel.value):sel.value;apply();mark();});wrap.append(sel);bar.append(wrap);return sel;}
-    const width=select('عرض','width',[[1,'یک‌نهم'],[2,'یک‌ششم'],[4,'یک‌سوم'],[6,'نصف'],[8,'دوسوم'],[12,'کامل']]);
+    const width=select('عرض','width',[[1,'یک‌نهم'],[2,'یک‌ششم'],[3,'یک‌چهارم'],[4,'یک‌سوم'],[6,'نصف'],[8,'دوسوم'],[12,'کامل']]);
     const height=select('ارتفاع','height',[['mini','خیلی کوتاه'],['compact','کوتاه'],['normal','معمولی'],['tall','بلند']]);
     const chartKinds=[['columns','ستونی'],['bars','میله‌ای افقی'],['ring','حلقه‌ای'],['pie','دایره‌ای']];
     if(custom){
+      const settings=document.createElement('details');settings.className='widget-settings';const settingsTitle=make('summary','تنظیم داده و نمودار');settings.append(settingsTitle);const settingsBody=make('div',null,'widget-settings-body');settings.append(settingsBody);
+      settingsTitle.addEventListener('click',event=>{event.preventDefault();const dialog=make('dialog',null,'widget-expanded');dialog.setAttribute('aria-label','تنظیم داده و نمودار');const done=button('پایان تنظیم',()=>dialog.close());dialog.append(make('h2','تنظیم داده و نمودار'),make('p','تغییرات را پس از بستن این پنجره با «ذخیره چیدمان» ثبت کنید.'),settingsBody,done);document.body.append(dialog);dialog.addEventListener('close',()=>{settings.append(settingsBody);dialog.remove();settingsTitle.focus();},{once:true});dialog.showModal();});
+      const beforeSettings=bar.children.length;
       const sourceOptions=Array.from(document.getElementById('widget-source').options);
       const source=select('سطر / داده','source',sourceOptions.map(o=>[o.value,o.textContent]));
       const split=select('ستون / تفکیک','split',[['','بدون تفکیک'],...sourceOptions.filter(o=>o.value!=='case-created'&&o.dataset.module===sourceOptions.find(x=>x.value===spec.source)?.dataset.module).map(o=>[o.value,o.textContent])]);
@@ -95,19 +116,20 @@
       const kind=select('نوع نمودار','kind',spec.source==='case-created'?[...chartKinds,['line','خطی'],['area','سطحی']]:chartKinds);
       source.addEventListener('change',()=>{spec.split='';split.replaceChildren(new Option('بدون تفکیک',''));sourceOptions.filter(o=>spec.source!=='case-created'&&o.value!=='case-created'&&o.dataset.module===sourceOptions.find(x=>x.value===spec.source)?.dataset.module).forEach(o=>split.add(new Option(o.textContent,o.value)));spec.kind='columns';kind.replaceChildren(...(spec.source==='case-created'?[...chartKinds,['line','خطی'],['area','سطحی']]:chartKinds).map(([value,text])=>new Option(text,value)));kind.value='columns';mark();});
       for(const [field,label] of [['title','عنوان نمودار'],['contains','فیلتر سطر (شامل)']]){const wrap=make('label',label),input=make('input');input.maxLength=150;input.value=spec[field]||'';if(field==='contains'){input.disabled=spec.source==='case-created';source.addEventListener('change',()=>{input.disabled=spec.source==='case-created';if(input.disabled){input.value='';spec.contains='';}});}input.addEventListener('change',()=>{spec[field]=input.value;mark();});wrap.append(input);bar.append(wrap);}
-    }else if(tile.querySelector('.visual-legend,.visual-columns')){
-      if(!spec.kind)spec.kind=tile.querySelector('.visual-legend')?'ring':'columns';
+      Array.from(bar.children).slice(beforeSettings).forEach(child=>settingsBody.append(child));bar.append(settings);
+    }else if(tile.querySelector('.visual-legend,.visual-columns,.bar-chart,.horizontal-chart')){
+      if(!spec.kind)spec.kind=tile.querySelector('.visual-legend')?'ring':tile.querySelector('.bar-chart,.horizontal-chart')?'bars':'columns';
       select('نوع نمودار','kind',chartKinds);
     }
-    const stackLabel=make('label','زیر ابزارک قبلی');
+    const stackLabel=make('label','در همان ستون، زیر ابزارک قبلی');
     const stackInput=make('input');stackInput.type='checkbox';stackInput.checked=!!spec.stack;
     stackInput.addEventListener('change',()=>{spec.stack=stackInput.checked;apply();mark();});
     stackLabel.append(stackInput);bar.append(stackLabel);
 
     bar.append(button('پنهان',()=>{spec.hidden=true;apply();refreshHidden();mark();}));if(custom)bar.append(button('حذف ابزارک',()=>{specs=specs.filter(s=>s.id!==spec.id);elements.delete(spec.id);tile.remove();refreshHidden();mark();}));tile.prepend(bar);
-    const resize=button('◲',()=>{const sizes=[1,2,4,6,8,12];spec.width=sizes[(sizes.indexOf(spec.width)+1)%sizes.length];width.value=spec.width;apply();mark();});resize.className='widget-resize';resize.setAttribute('aria-label','تغییر اندازه؛ کلیک برای عرض بعدی یا کشیدن گوشه');
+    const resize=button('◲',()=>{const sizes=[1,2,3,4,6,8,12];spec.width=sizes[(sizes.indexOf(spec.width)+1)%sizes.length];width.value=spec.width;apply();mark();});resize.className='widget-resize';resize.setAttribute('aria-label','تغییر اندازه؛ کلیک برای عرض بعدی یا کشیدن گوشه');
     resize.addEventListener('pointerdown',e=>{if(e.button!==0)return;const x=e.clientX,y=e.clientY,initialWidth=tile.getBoundingClientRect().width,initialHeight=tile.getBoundingClientRect().height;let moved=false;resize.setPointerCapture(e.pointerId);
-      const onMove=event=>{if(Math.abs(event.clientX-x)+Math.abs(event.clientY-y)<8)return;moved=true;const unit=grid.getBoundingClientRect().width/12,target=(initialWidth+x-event.clientX)/unit;spec.width=[1,2,4,6,8,12].reduce((a,b)=>Math.abs((b===1?4/3:b)-target)<Math.abs((a===1?4/3:a)-target)?b:a);spec.height=initialHeight+event.clientY-y<170?'mini':initialHeight+event.clientY-y<330?'compact':initialHeight+event.clientY-y>510?'tall':'normal';width.value=spec.width;height.value=spec.height;apply();mark();};
+      const onMove=event=>{if(Math.abs(event.clientX-x)+Math.abs(event.clientY-y)<8)return;moved=true;const unit=grid.getBoundingClientRect().width/12,target=(initialWidth+x-event.clientX)/unit;spec.width=[1,2,3,4,6,8,12].reduce((a,b)=>Math.abs((b===1?4/3:b)-target)<Math.abs((a===1?4/3:a)-target)?b:a);spec.height=initialHeight+event.clientY-y<170?'mini':initialHeight+event.clientY-y<330?'compact':initialHeight+event.clientY-y>510?'tall':'normal';width.value=spec.width;height.value=spec.height;apply();mark();};
       const end=()=>{resize.removeEventListener('pointermove',onMove);resize.removeEventListener('pointerup',end);resize.removeEventListener('pointercancel',end);if(moved)resize.addEventListener('click',event=>{event.stopImmediatePropagation();event.preventDefault();},{once:true,capture:true});};
       resize.addEventListener('pointermove',onMove);resize.addEventListener('pointerup',end);resize.addEventListener('pointercancel',end);
     });tile.append(resize);
@@ -115,11 +137,19 @@
   const hiddenSelect=make('select');hiddenSelect.setAttribute('aria-label','ابزارک‌های پنهان');
   function refreshHidden(){hiddenSelect.replaceChildren();const first=make('option','نمایش دوباره ابزارک پنهان…');first.value='';hiddenSelect.append(first);specs.filter(s=>s.hidden).forEach(s=>{const o=make('option',elements.get(s.id)?.querySelector('h2')?.textContent||'کارت '+s.id);o.value=s.id;hiddenSelect.append(o);});hiddenSelect.hidden=!editing||!specs.some(s=>s.hidden);}
   hiddenSelect.addEventListener('change',()=>{const spec=specs.find(s=>s.id===hiddenSelect.value);if(spec){spec.hidden=false;apply();refreshHidden();mark();}});
-  const edit=button('ویرایش چیدمان',()=>{editing=!editing;grid.classList.toggle('layout-editing',editing);edit.textContent=editing?'پایان ویرایش':'ویرایش چیدمان';edit.setAttribute('aria-pressed',editing);save.hidden=!editing;reset.hidden=!editing;publishButton.hidden=!editing||!saved.can_publish;withdrawButton.hidden=!editing||!saved.can_publish||!saved.published;refreshHidden();if(custom)host.querySelector('.builder-catalog').hidden=!editing;});edit.setAttribute('aria-pressed','false');
+  const edit=button('ویرایش چیدمان',()=>{editing=!editing;grid.classList.toggle('layout-editing',editing);edit.textContent=editing?'پایان ویرایش':'ویرایش چیدمان';edit.setAttribute('aria-pressed',editing);save.hidden=!editing;reset.hidden=!editing;stackCounts.hidden=!editing;publishButton.hidden=!editing||!saved.can_publish;withdrawButton.hidden=!editing||!saved.can_publish||!saved.published;refreshHidden();if(custom)host.querySelector('.builder-catalog').hidden=!editing;});edit.setAttribute('aria-pressed','false');
+  const stackCounts=button('کارت‌های عددی زیر هم',()=>{
+    const cards=specs.filter(s=>elements.get(s.id)?.querySelector(':scope > .stat')&&!s.hidden);
+    if(!cards.length)return;
+    const others=specs.filter(s=>!cards.includes(s));
+    cards.forEach((s,i)=>{s.width=4;s.height='compact';s.stack=i>0;});
+    others.forEach((s,i)=>{if(!s.hidden){s.width=8;s.stack=i>0;}});
+    specs=[...cards,...others];apply();mark();
+  });stackCounts.hidden=true;toolbar.append(stackCounts);
   async function persist(resetAll=false,reloadAfter=true){
     save.disabled=true;status.textContent='در حال ذخیره…';
     try{const csrf=document.querySelector('[name=csrfmiddlewaretoken]')?.value || decodeURIComponent(document.cookie.split('; ').find(x=>x.startsWith('csrftoken='))?.split('=').slice(1).join('=')||'');
-      const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({widgets:resetAll?[]:specs,revision,title:custom?document.getElementById('personal-title').value:undefined})});if(!(response.headers.get('Content-Type')||'').includes('application/json'))throw new Error('نشست ورود یا مجوز ذخیره معتبر نیست؛ صفحه را تازه کنید و دوباره وارد شوید.');const result=await response.json();if(!response.ok)throw new Error(result.error||'ذخیره انجام نشد.');revision=result.revision;dirty=false;status.textContent='چیدمان در حساب شما ذخیره شد.';if(reloadAfter&&(custom||resetAll))location.reload();return true;
+      const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrf},body:JSON.stringify({widgets:resetAll?[]:specs,revision,title:custom?document.getElementById('personal-title').value:undefined})});if(!(response.headers.get('Content-Type')||'').includes('application/json'))throw new Error('نشست ورود یا مجوز ذخیره معتبر نیست؛ صفحه را تازه کنید و دوباره وارد شوید.');const result=await response.json();if(!response.ok)throw new Error(result.error||'ذخیره انجام نشد.');revision=result.revision;dirty=false;status.textContent='ذخیره شد.';setTimeout(()=>{if(!dirty&&status.textContent==='ذخیره شد.')status.textContent='';},4000);if(reloadAfter&&(custom||resetAll))location.reload();return true;
     }catch(error){status.textContent=error.message||'ارتباط برقرار نشد؛ تغییرات شما هنوز ذخیره نشده است.';}finally{save.disabled=false;}
   }
   const save=button('ذخیره چیدمان',()=>persist()),reset=button(custom?'خالی‌کردن داشبورد':'بازگشت به چیدمان پیش‌فرض',()=>{if(confirm('چیدمان این صفحه بازنشانی شود؟ داده‌های CRM تغییری نمی‌کنند.'))persist(true);});save.hidden=true;reset.hidden=true;

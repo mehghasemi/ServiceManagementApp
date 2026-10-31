@@ -18,10 +18,10 @@ def distribution(rows, title, kind='ring', note=''):
         row['pie_path']=f'M60 60 L{60+46*math.cos(start):.4f} {60+46*math.sin(start):.4f} A46 46 0 {1 if share>50 else 0} 1 {60+46*math.cos(end):.4f} {60+46*math.sin(end):.4f} Z'
         row['bar_width']=count*100/peak if peak else 0
         offset += share
-    return {'rows': values, 'total': total, 'title': title, 'kind': kind, 'note': note}
+    return {'rows': values, 'total': total, 'title': title, 'kind': kind, 'note': note, 'single_category': len(values) == 1 and total > 0, 'unknown_only': bool(values) and all(row['label'] in ('نامشخص','') for row in values)}
 
 @register.inclusion_tag('visuals/visit_stack.html')
 def visit_stack(row):
     done=float(row.get('done_width',0))
     pending=float(row.get('pending_width',0))
-    return {'done':done,'pending':pending,'unknown':float(row.get('unknown_width',0)),'unknown_start':done+pending}
+    return {'done_url':row.get('done_url'),'pending_url':row.get('pending_url'),'unknown_url':row.get('unknown_url'),'done':done,'pending':pending,'unknown':float(row.get('unknown_width',0)),'unknown_start':done+pending}

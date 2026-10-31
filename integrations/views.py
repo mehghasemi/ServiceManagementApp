@@ -82,6 +82,11 @@ def dashboard(request):
         from criteria.engine import evaluate_records
         candidates, _ = evaluate_records(planning_facts(dashboard_cases, request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate()), scoped_rules)
         dashboard_cases = dashboard_cases.filter(pk__in=[r['item'].pk for r in candidates if any(str(rule.pk)==bucket for rule in r['rules'])])
+    if request.GET.get('created_month'):
+        from planning.charts import creation_month
+        dashboard_cases=dashboard_cases.filter(pk__in=[c.pk for c in dashboard_cases if creation_month(c)==request.GET['created_month']])
+    if request.GET.get('has_action')=='1':
+        dashboard_cases=dashboard_cases.annotate(scope_actions=Count('local_actions',filter=open_actions_filter(request.user))).filter(scope_actions__gt=0)
     rows = dashboard_cases.annotate(open_actions=Count('local_actions', filter=open_actions_filter(request.user)))
     total = rows.count()
     type_counts = list(dashboard_cases.values('evidence__incident_type').annotate(count=Count('pk')).order_by('-count'))
@@ -101,6 +106,9 @@ def dashboard(request):
     action_coverage = round((total - without_action) * 100 / total, 1) if total else None
     visual_cases = list(dashboard_cases)
     creation = creation_chart(visual_cases, timezone.localdate())
+    from planning.drilldown import chart_url
+    for item in creation['rows']: item['url']=chart_url(request,created_month=item['label'])
+    for item in chart_rows: item['url']=chart_url(request,status=item['source_status'],status_missing='1' if not item['source_status'] else '')
     attention_creation = creation_chart([case for case in visual_cases if case.pk in hit_map], timezone.localdate())
     unlinked_creation = creation_chart([case for case in visual_cases if not case.parent_id], timezone.localdate())
     customer_filter, parent_filter = customer_scope, parent_scope
@@ -239,11 +247,13 @@ def actions_page(request):
     scope = configuration().scope
     active_ids = set(current_cases(request.user).values_list('id', flat=True))
     actions = shared_queryset(CaseAction.objects.all(), request.user, 'actor').filter(case__scope=scope).select_related('case').order_by('status', 'due_date')
+    if 'status' in request.GET: actions=actions.filter(status=request.GET['status'])
     page = Paginator(actions, 30).get_page(request.GET.get('page'))
     for action in page:
         action.in_current_view = action.case_id in active_ids
     from collections import Counter
-    action_chart=[{'label':str(label),'count':actions.filter(status=value).count()} for value,label in CaseAction._meta.get_field('status').choices]
+    from planning.drilldown import chart_url
+    action_chart=[{'url':chart_url(request,status=value),'label':str(label),'count':actions.filter(status=value).count()} for value,label in CaseAction._meta.get_field('status').choices]
     return render(request, 'crm/actions.html', {'page': page, 'action_chart':action_chart,'crm_mode': True, 'mode': 'crm-actions'})
 
 

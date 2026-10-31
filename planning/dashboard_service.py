@@ -59,6 +59,9 @@ def chart_data(user, specs):
             creation=creation_chart(datasets[module],timezone.localdate());rows=creation['rows']
         else:
             rows=aggregate(datasets[module],source,spec.get('split',''),spec.get('contains',''))
+        from .drilldown import widget_url
+        if source != 'case-created':
+            for row in rows: row['url']=widget_url(source,row['category'],spec.get('split',''),row['series'])
         route={'planning':'planning-dashboard','projects':'projects-dashboard','backlogs':'backlogs','periodic':'planning-periodic'}[module]
         output.append({**spec,'title':spec.get('title') or title,'rows':rows,'creation':creation,'snapshot':snapshot,'url':reverse(route)})
     return output

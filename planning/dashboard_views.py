@@ -24,7 +24,7 @@ def validate_widgets(value, custom):
         if 'stack' in widget and type(widget['stack']) is not bool: raise ValueError()
         if not isinstance(widget['id'],str) or not re.fullmatch(r'w-[a-z0-9-]{1,60}',widget['id']) or widget['id'] in ids: raise ValueError()
         ids.add(widget['id'])
-        if type(widget['width']) is not int or widget['width'] not in (1,2,4,6,8,12): raise ValueError()
+        if type(widget['width']) is not int or widget['width'] not in (1,2,3,4,6,8,12): raise ValueError()
         if widget['height'] not in ('mini','compact','normal','tall') or type(widget['hidden']) is not bool: raise ValueError()
         if not custom and 'kind' in widget and widget['kind'] not in KINDS: raise ValueError()
         if custom:

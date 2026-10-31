@@ -80,3 +80,29 @@ class TodayTests(TestCase):
         self.assertEqual(r.context['total'],1)
         self.assertEqual(sum(x['count'] for x in r.context['version_chart']),1)
         self.assertEqual(r.context['page'].paginator.count,1)
+
+    def test_chart_records_respects_scope_and_dimension(self):
+        from planning.drilldown import widget_url
+        url=widget_url('case-status','Open')
+        response=self.client.get(url)
+        self.assertEqual(response.context['page'].paginator.count,1)
+        self.assertContains(response,'Synthetic')
+        self.assertEqual(self.client.get(widget_url('case-status','Other')).context['page'].paginator.count,0)
+        other=get_user_model().objects.create_user('chart-other',is_staff=True)
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(url).context['page'].paginator.count,0)
+
+    def test_chart_created_and_split_match_source(self):
+        from planning.drilldown import widget_url
+        from planning.charts import creation_month
+        self.assertEqual(self.client.get(widget_url('case-created',creation_month(self.case))).context['page'].paginator.count,1)
+        self.assertEqual(self.client.get(widget_url('case-status','Open','case-customer','نامشخص')).context['page'].paginator.count,1)
+        self.assertEqual(self.client.get(widget_url('case-status','Open','project-phase','x')).status_code,404)
+
+    def test_upgrade_version_click_selects_customers(self):
+        self.case.customer_id=str(uuid.uuid4());self.case.customer='Selected';self.case.save()
+        response=self.client.get('/planning/upgrades/')
+        chart=response.context['version_chart'][0]
+        target=self.client.get(chart['url'].split('#')[0].replace('?', '/planning/upgrades/?',1))
+        self.assertEqual(target.context['page'].paginator.count,chart['count'])
+        self.assertEqual(self.client.get('/planning/upgrades/',{'version':'nonexistent'}).context['total'],0)

@@ -2,10 +2,11 @@
 from django.db.models import Count
 
 def status_distribution(cases):
+    from planning.drilldown import widget_url
     rows = list(cases.values('source_status').annotate(count=Count('pk')).order_by('-count', 'source_status'))
     total = sum(row['count'] for row in rows)
     maximum = max((row['count'] for row in rows), default=0)
-    return [{'source_status': row['source_status'], 'label': row['source_status'] or 'وضعیت نامشخص', 'count': row['count'], 'width': round(row['count'] * 100 / maximum, 2) if maximum else 0, 'percent': round(row['count'] * 100 / total, 1) if total else 0} for row in rows]
+    return [{'url': widget_url('case-status',row['source_status'] or 'نامشخص'), 'source_status': row['source_status'], 'label': row['source_status'] or 'وضعیت نامشخص', 'count': row['count'], 'width': round(row['count'] * 100 / maximum, 2) if maximum else 0, 'percent': round(row['count'] * 100 / total, 1) if total else 0} for row in rows]
 
 
 def creation_chart(cases, today):
@@ -41,6 +42,8 @@ def creation_chart(cases, today):
         y = round(150 - (count / peak * 120 if peak else 0), 2)
         points.append(f'{x},{y}')
         rows.append({'label': f'{key[0]}/{key[1]:02}', 'count': count, 'x': x, 'y': y})
+    from planning.drilldown import widget_url
+    for row in rows: row['url']=widget_url('case-created',row['label'])
     return {'rows': rows, 'points': ' '.join(points), 'area': '30,150 ' + ' '.join(points) + ' 530,150', 'unknown': unknown, 'sum': sum(counts.values())}
 
 
@@ -53,3 +56,17 @@ def status_ring(rows):
         result.append({**row, 'share': share, 'offset': -offset})
         offset += share
     return result
+
+
+def creation_month(case):
+    import jdatetime
+    from django.utils import timezone
+    from django.utils.dateparse import parse_datetime
+    try:
+        value=parse_datetime(str(case.evidence.get('created_on','')))
+        if value is None:return ''
+        day=timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+        if day>timezone.localdate():return ''
+        value=jdatetime.date.fromgregorian(date=day)
+        return f'{value.year}/{value.month:02}'
+    except (ValueError,TypeError,OverflowError):return ''

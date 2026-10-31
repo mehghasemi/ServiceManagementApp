@@ -18,3 +18,30 @@ class VisualChartTests(SimpleTestCase):
         rows=status_ring([{'count':1},{'count':2}])
         self.assertAlmostEqual(sum(x['share'] for x in rows),100)
         self.assertEqual(rows[1]['offset'],-rows[0]['share'])
+
+
+class DistributionPresentationTests(SimpleTestCase):
+    def render_chart(self, rows, kind='ring'):
+        from django.template.loader import render_to_string
+        from planning.templatetags.dashboard_visuals import distribution
+        return render_to_string('visuals/distribution.html', distribution(rows, 'آزمون', kind))
+
+    def test_single_category_preserves_count_link_and_does_not_draw_chart(self):
+        html = self.render_chart([{'label':'نمونه','count':7,'url':'?month=1405-08&status=x'}])
+        self.assertIn('single-category', html)
+        self.assertIn('month=1405-08&amp;status=x', html)
+        self.assertIn('>7<', html)
+        self.assertNotIn('<svg', html)
+
+    def test_unknown_and_empty_are_distinct(self):
+        unknown = self.render_chart([{'label':'نامشخص','count':7}])
+        empty = self.render_chart([])
+        self.assertIn('data-quality-state', unknown)
+        self.assertNotIn('single-category', unknown)
+        self.assertIn('visual-empty', empty)
+
+    def test_bar_drilldowns_preserve_links_in_overflow_categories(self):
+        rows=[{'label':str(i),'count':i+1,'url':f'?month=1405-08&city={i}'} for i in range(10)]
+        html=self.render_chart(rows,'bars')
+        for i in range(10):
+            self.assertIn(f'?month=1405-08&amp;city={i}',html)
