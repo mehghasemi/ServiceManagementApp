@@ -32,7 +32,7 @@
   document.querySelectorAll('.personal-dashboard-grid').forEach(stackTiles);
   const routes={'/':'home','/planning/':'planning','/planning/today/':'today','/projects/':'projects','/planning/backlogs/':'backlogs','/planning/visits/periodic/':'periodic','/planning/visits/onsite/':'onsite','/planning/upgrades/':'upgrades','/planning/suggestions/':'suggestions','/planning/actions/':'actions','/planning/attention/':'planning-attention','/projects/attention/':'projects-attention'};
   const host=document.getElementById('dashboard-builder'),custom=!!host;
-  const key=custom?host.dataset.dashboardKey:routes[location.pathname];
+  const key=custom?host.dataset.dashboardKey:document.getElementById('upgrade-execution')?'upgrade-execution':routes[location.pathname];
   if(!key || !document.getElementById('main'))return;
   const endpoint='/preferences/dashboards/'+key+'/', elements=new Map();
   let specs=[],revision=0,editing=false,dirty=false,dragged=null;

@@ -19,7 +19,9 @@ def validate_widgets(value, custom):
     if not isinstance(value,list) or len(value)>30: raise ValueError()
     ids=set()
     for widget in value:
+        dynamic = custom and isinstance(widget, dict) and widget.get('source') == 'dynamic'
         fields={'id','width','height','hidden'} | ({'source','kind'} if custom else set())
+        if dynamic: fields.add('query')
         if not isinstance(widget,dict) or set(widget)-({'stack','split','contains','title'} if custom else {'stack','kind'})!=fields: raise ValueError()
         if 'stack' in widget and type(widget['stack']) is not bool: raise ValueError()
         if not isinstance(widget['id'],str) or not re.fullmatch(r'w-[a-z0-9-]{1,60}',widget['id']) or widget['id'] in ids: raise ValueError()
@@ -28,6 +30,15 @@ def validate_widgets(value, custom):
         if widget['height'] not in ('mini','compact','normal','tall') or type(widget['hidden']) is not bool: raise ValueError()
         if not custom and 'kind' in widget and widget['kind'] not in KINDS: raise ValueError()
         if custom:
+            if dynamic:
+                from .reporting.engine import validate_query, KINDS as REPORT_KINDS
+                validate_query(widget['query'])
+                if widget['kind'] not in REPORT_KINDS: raise ValueError()
+                dimensions = widget['query'].get('dimensions', [])
+                if widget['kind'] == 'kpi' and dimensions: raise ValueError()
+                if widget['kind'] in ('stacked', 'pivot') and len(dimensions) < 2: raise ValueError()
+                if not isinstance(widget.get('title', ''), str) or len(widget.get('title', '')) > 150: raise ValueError()
+                continue
             if widget['source'] not in CATALOG: raise ValueError()
             allowed=KINDS+('line','area') if widget['source']=='case-created' else KINDS
             if widget['kind'] not in allowed: raise ValueError()
@@ -58,7 +69,9 @@ def index(request):
 @ensure_csrf_cookie
 def dashboard(request,key):
     row=get_object_or_404(PersonalDashboard,user=request.user,key=key,key__startswith='custom-')
-    return render(request,'dashboards/detail.html',{'dashboard':row,'widgets':chart_data(request.user,row.widgets),'catalog':CATALOG,'mode':'personal-dashboards'})
+    if not row.widgets or row.configuration.get('version') == 2 or any(w.get('source') == 'dynamic' for w in row.widgets) or request.GET.get('designer') == '1':
+        return render(request, 'dashboards/designer.html', {'dashboard': row, 'mode': 'personal-dashboards'})
+    return render(request,'dashboards/detail.html',{'dashboard':row,'widgets':chart_data(request.user,row.widgets,request),'catalog':CATALOG,'mode':'personal-dashboards'})
 
 
 @ensure_csrf_cookie
@@ -74,12 +87,15 @@ def layout(request,key):
         inherited=bool(not custom and not (row and row.widgets) and publication and publication.enabled)
         widgets=publication.widgets if inherited else row.widgets if row else []
         return JsonResponse({'widgets':widgets,'revision':row.revision if row else 0,'title':row.title if row else '',
+                             'configuration':row.configuration if row else {},
                              'inherited':inherited,'publication_revision':publication.revision if publication else 0,
                              'published':bool(publication and publication.enabled),'can_publish':can_manage(request.user,request)})
     try:
-        if len(request.body)>20000: raise ValueError()
+        if len(request.body)>200000: raise ValueError()
         data=json.loads(request.body)
         widgets=validate_widgets(data['widgets'],custom)
+        from .reporting.configuration import validate_configuration
+        configuration = validate_configuration(data.get('configuration', row.configuration if row else {}), widgets)
         revision=data['revision']
         if type(revision) is not int or revision<0: raise ValueError()
         title=data.get('title',row.title if row else '')
@@ -88,7 +104,7 @@ def layout(request,key):
         return JsonResponse({'error':'چیدمان معتبر نیست؛ اندازه و نوع نمودار را از گزینه‌های موجود انتخاب کنید.'},status=400)
     conflict={'error':'این داشبورد در پنجره دیگری تغییر کرده است. صفحه را تازه کنید؛ تغییرات ذخیره‌نشده شما ارسال نمی‌شوند.'}
     if row:
-        changed=PersonalDashboard.objects.filter(pk=row.pk,user=request.user,revision=revision).update(widgets=widgets,title=title.strip(),revision=revision+1,updated_at=timezone.now())
+        changed=PersonalDashboard.objects.filter(pk=row.pk,user=request.user,revision=revision).update(widgets=widgets,title=title.strip(),configuration=configuration,revision=revision+1,updated_at=timezone.now())
         if not changed: return JsonResponse(conflict,status=409)
     else:
         if revision!=0: return JsonResponse(conflict,status=409)
@@ -101,7 +117,9 @@ def layout(request,key):
 @operator_required
 def shared_dashboard(request,key):
     row=get_object_or_404(DashboardPublication,key=key,key__startswith='custom-',enabled=True)
-    return render(request,'dashboards/detail.html',{'dashboard':row,'widgets':chart_data(request.user,row.widgets),'shared':True,'mode':'personal-dashboards'})
+    if row.configuration.get('version') == 2 or any(w.get('source') == 'dynamic' for w in row.widgets):
+        return render(request, 'dashboards/designer.html', {'dashboard': row, 'shared': True, 'mode': 'personal-dashboards'})
+    return render(request,'dashboards/detail.html',{'dashboard':row,'widgets':chart_data(request.user,row.widgets,request),'shared':True,'mode':'personal-dashboards'})
 
 
 @require_http_methods(['POST'])
@@ -118,7 +136,7 @@ def publish(request,key):
     draft=get_object_or_404(PersonalDashboard,user=request.user,key=key)
     if draft.revision!=revision:return JsonResponse({'error':'پیش‌نویس تغییر کرده است؛ صفحه را تازه کنید.'},status=409)
     current=DashboardPublication.objects.filter(key=key).first()
-    values={'title':draft.title,'widgets':draft.widgets,'enabled':enabled,'publisher':request.user,'updated_at':timezone.now()}
+    values={'title':draft.title,'widgets':draft.widgets,'configuration':draft.configuration,'enabled':enabled,'publisher':request.user,'updated_at':timezone.now()}
     if current:
         changed=DashboardPublication.objects.filter(pk=current.pk,revision=expected).update(**values,revision=expected+1)
         if not changed:return JsonResponse({'error':'نسخه مشترک توسط ادمین دیگری تغییر کرده است؛ صفحه را تازه کنید.'},status=409)

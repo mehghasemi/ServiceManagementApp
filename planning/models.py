@@ -90,6 +90,7 @@ class PersonalDashboard(models.Model):
     key = models.SlugField(max_length=80)
     title = models.CharField(max_length=100, blank=True)
     widgets = models.JSONField(default=list)
+    configuration = models.JSONField(default=dict)
     revision = models.PositiveIntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -102,6 +103,7 @@ class DashboardPublication(models.Model):
     key = models.SlugField(max_length=80, unique=True)
     title = models.CharField(max_length=100, blank=True)
     widgets = models.JSONField(default=list)
+    configuration = models.JSONField(default=dict)
     enabled = models.BooleanField(default=True)
     revision = models.PositiveIntegerField(default=1)
     publisher = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)

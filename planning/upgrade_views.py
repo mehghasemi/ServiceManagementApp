@@ -42,6 +42,8 @@ def onsite(request):
 
 @operator_required
 def dashboard(request):
+    if request.GET.get('view') != 'customers' and 'version' not in request.GET and 'rule' not in request.GET and 'eligible' not in request.GET:
+        return execution_dashboard(request)
     rules=[r for r in ensure_rules(module_settings()) if r.enabled and r.purpose=='opportunity' and r.metric!='fix_newer' and r.dashboard=='upgrade']
     selected=request.GET.get('rule','')
     default=next((r for r in rules if r.code=='upgrade'),rules[0] if rules else None)
@@ -65,3 +67,42 @@ def dashboard(request):
     return render(request,'crm/upgrades.html',{'crm_mode':True,'mode':'upgrades','active_module':'planning','snapshot':snapshot,
         'rules':rules,'rule':rule,'eligible':eligible,'related':related,'missing':missing,'total':total,'version_chart':version_chart,'top_customers':top,
         'only_eligible':request.GET.get('eligible')=='1','page':Paginator(rows,10).get_page(request.GET.get('page'))})
+
+
+def execution_dashboard(request):
+    from .backlogs import snapshot_for
+    from .upgrade_execution import execution_rows
+    ready_rules = [r for r in ensure_rules(module_settings()) if r.enabled and r.purpose == 'upgrade_ready' and r.dashboard == 'upgrade']
+    program_rules = [r for r in ensure_rules(module_settings('backlogs')) if r.enabled and r.purpose == 'upgrade_program' and r.dashboard == 'upgrade']
+    snapshot = active_snapshot(request.user)
+    backlog_snapshot = snapshot_for(request.user)
+    records = planning_facts(current_cases(request.user), request.user, bool(snapshot and snapshot.coverage.get('notes')), timezone.localdate())
+    if request.GET.get('center'):
+        records = [(case, facts) for case, facts in records if str(case.customer_id) == request.GET['center']]
+    rows = execution_rows(records, backlog_snapshot.records if backlog_snapshot else [], ready_rules, program_rules)
+    months = sorted({r['release'] for r in rows})
+    for field in ('release', 'category', 'status'):
+        if request.GET.get(field):
+            rows = [r for r in rows if r[field] == request.GET[field]]
+    if request.GET.get('program'):
+        rows = [r for r in rows if r['key'] == request.GET['program']]
+    counts = Counter()
+    for row in rows:
+        counts[row['category']] += row['count']
+    programs = [r for r in rows if r['category'] == 'upgrade']
+    top = [{'label': r['customer'] + ' · ' + (r['backlog'].get('number') or r['title']), 'count': r['count'],
+            'url': chart_url(request, program=r['key'])} for r in programs[:8]]
+    statuses = Counter(r['status'] for r in programs)
+    status_chart = [{'label': key, 'count': count, 'url': chart_url(request, status=key, category='upgrade')} for key, count in statuses.items()]
+    selected_cases = [case for row in rows for case in row['cases']] if request.GET.get('drill') else []
+    for row in rows:
+        row['url'] = chart_url(request, program=row['key'])
+    rows = sort_rows(request, rows, {'customer': 'customer', 'count': 'count', 'status': 'status', 'release': 'release', 'sprint': 'sprint'})
+    return render(request, 'crm/upgrade_execution.html', {
+        'crm_mode': True, 'mode': 'upgrades', 'active_module': 'planning', 'snapshot': snapshot,
+        'backlog_snapshot': backlog_snapshot, 'ready_rules': ready_rules, 'program_rules': program_rules,
+        'months': months, 'potential': sum(counts.values()), 'program_count': len(programs),
+        'linked': counts['upgrade'], 'unlinked': counts['unlinked'], 'unreceived': counts['unreceived'], 'other': counts['other'],
+        'top_programs': top, 'status_chart': status_chart, 'page': Paginator(rows, 15).get_page(request.GET.get('page')),
+        'case_page': Paginator(selected_cases, 20).get_page(request.GET.get('case_page')),
+    })

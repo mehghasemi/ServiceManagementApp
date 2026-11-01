@@ -55,13 +55,13 @@ class VisitDashboardTests(TestCase):
             self.assertEqual(self.client.get(path).status_code, 200)
         opt = module_settings('backlogs')
         rules = ensure_rules(opt)
-        self.assertEqual({r.dashboard for r in rules}, {'onsite', 'periodic'})
+        self.assertEqual({r.dashboard for r in rules}, {'onsite', 'periodic', 'upgrade'})
         rule = rules[0]; rule.value = ['انتخاب کاربر']; rule.save()
         self.assertEqual(ensure_rules(opt)[0].value, ['انتخاب کاربر'])
 
     def test_upgrade_rules_do_not_offer_onsite(self):
         user = get_user_model().objects.create_user('upgrade-operator', is_staff=True)
         self.client.force_login(user)
-        response = self.client.get('/planning/upgrades/')
+        response = self.client.get('/planning/upgrades/?view=customers')
         self.assertEqual(response.status_code, 200)
         self.assertEqual([r.dashboard for r in response.context['rules']], ['upgrade'])

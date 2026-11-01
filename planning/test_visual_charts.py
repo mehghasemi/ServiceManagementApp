@@ -14,6 +14,14 @@ class VisualChartTests(SimpleTestCase):
     def test_empty_series_safe(self):
         self.assertEqual(creation_chart([],date(2026,10,25))['sum'],0)
         self.assertEqual(status_ring([]),[])
+
+    def test_custom_range_and_partial_month(self):
+        cases=[SimpleNamespace(evidence={'created_on':v}) for v in ['2024-04-01T00:00:00Z','2026-10-01T00:00:00Z','2026-10-20T00:00:00Z']]
+        result=creation_chart(cases,date(2026,10,25),'2024-04-01','2026-10-10')
+        self.assertEqual(result['sum'],2)
+        self.assertGreater(len(result['rows']),6)
+        self.assertIn('trend_from=',result['rows'][0]['url'])
+        self.assertTrue(creation_chart(cases,date(2026,10,25),'bad')['error'])
     def test_ring_exact_shares(self):
         rows=status_ring([{'count':1},{'count':2}])
         self.assertAlmostEqual(sum(x['share'] for x in rows),100)

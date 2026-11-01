@@ -32,6 +32,10 @@ def records(request):
     if source=='case-created':
         from .charts import creation_month
         rows=[r for r in rows if creation_month(r)==category]
+        from .reporting.engine import day
+        lower, upper = day(request.GET.get('trend_from')), day(request.GET.get('trend_to'))
+        if lower or upper:
+            rows=[r for r in rows if (stamp:=day(r.evidence.get('created_on'))) and (not lower or stamp>=lower) and (not upper or stamp<=upper)]
     else: rows=[r for r in rows if dimension(r,source)==category and (not split or dimension(r,split)==series)]
     output=[]
     for r in rows:

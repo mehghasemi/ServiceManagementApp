@@ -1,7 +1,9 @@
 """One-time editable starting values; never override a user's saved rules."""
 def definitions(options):
+    from .upgrade_defaults import READY, PROGRAM
     if options.module == 'backlogs':
         return [
+            dict(PROGRAM),
             dict(code='periodic', label='بازدید دوره‌ای', dashboard='periodic', metric='case_service', operator='in', value=['برنامه ریزی - بازدید دوره ای'], purpose='attention', active_only=True, priority=2),
             dict(code='onsite', label='نیازمند مراجعه حضوری', dashboard='onsite', metric='source_status', operator='in', value=['Checking in Presence Services'], purpose='attention', active_only=True, priority=2),
         ]
@@ -20,6 +22,7 @@ def definitions(options):
             rule('no_due', 'موعد پایان پروژه ثبت نشده', 'planned_end_missing', 'eq', True, 2, action_title='توافق بر موعد برنامه', impact='امکان پیگیری تعهد و سنجش پیشرفت'),
         ]
     return [
+        dict(READY),
         rule('missing_parent', 'رابطه برنامه مشخص نیست', 'has_parent', 'eq', False, 3, active_only=False),
         rule('parent_review', 'وضعیت برنامه نیازمند تطبیق است', 'parent_status', 'in', [s.strip() for s in options.parent_review_statuses.split(',') if s.strip()], 3),
         rule('resolution_review', 'رفع در نسخه و تأیید مشتری نیازمند بررسی است', 'source_status', 'in', ['Done'], 2, closure_candidate=True),

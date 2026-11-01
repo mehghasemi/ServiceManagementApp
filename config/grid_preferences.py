@@ -8,6 +8,7 @@ from config.access import member
 from planning.models import GridPreference
 
 KEYS = {'visits-onsite', 'visits-periodic', 'cases', 'projects', 'backlogs', 'upgrades', 'planning-attention',
+        'upgrade-execution', 'upgrade-execution-cases',
         'projects-attention', 'demo-board', 'demo-cases'}
 
 

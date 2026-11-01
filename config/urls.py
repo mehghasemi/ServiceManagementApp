@@ -11,8 +11,13 @@ from config.grid_preferences import preferences
 
 from config.backups import backups
 from planning import dashboard_views
+from planning.reporting import views as reporting_views
 
 urlpatterns = [
+    path('dashboards/data/metadata/', reporting_views.metadata, name='report-metadata'),
+    path('dashboards/data/preview/', reporting_views.preview, name='report-preview'),
+    path('dashboards/data/options/', reporting_views.options, name='report-options'),
+    path('dashboards/<slug:key>/manage/', reporting_views.manage, name='report-manage'),
     path('chart-records/', drilldown.records, name='chart-records'),
     path('dashboards/shared/<slug:key>/',dashboard_views.shared_dashboard,name='shared-dashboard'),
     path('preferences/dashboards/<slug:key>/publish/',dashboard_views.publish,name='dashboard-publish'),

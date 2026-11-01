@@ -67,6 +67,6 @@ def dashboard(request):
     for row in status_chart:
         row['url']=reverse('planning-dashboard')+'?'+urlencode({'status':row['source_status']} if row['source_status'] else {'status_missing':'1'})
     return render(request,'planning/today.html',{'mode':'today','crm_mode':True,'snapshot':snapshot,'counts':counts,
-        'creation':creation_chart(cases,today),'action_count':action_count,'page':Paginator(entries,25 if full else 5).get_page(request.GET.get('page')),
+        'creation':creation_chart(cases,today,request.GET.get('trend_from'),request.GET.get('trend_to')),'action_count':action_count,'page':Paginator(entries,25 if full else 5).get_page(request.GET.get('page')),
         'full':full,'group':group,'queue_total':len(entries),'sources':sources,'status_chart':status_chart,'case_count':cases.count()})
 

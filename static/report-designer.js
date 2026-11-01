@@ -1,0 +1,185 @@
+/* Generic visual report designer. Every query is validated again by the server. */
+(async()=>{
+  const host=document.getElementById('report-designer');if(!host)return;
+  const shared=host.dataset.shared==='true',key=host.dataset.key,canvas=document.getElementById('report-canvas'),status=document.getElementById('report-status');
+  const token=host.querySelector('[name=csrfmiddlewaretoken]').value;
+  let widgets=JSON.parse(document.getElementById('report-widgets').textContent),configuration=JSON.parse(document.getElementById('report-configuration').textContent),revision=Number(host.dataset.revision),title=host.querySelector('h1').textContent;
+  configuration={version:2,description:'',filters:[],...configuration};
+  let metadata={},results=new Map(),values={},dirty=false,publicationRevision=0,requestNumber=0;
+  const el=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined&&text!==null)node.textContent=text;if(cls)node.className=cls;return node;};
+  const button=(text,fn,cls='small-button')=>{const node=el('button',text,cls);node.type='button';node.addEventListener('click',fn);return node;};
+  const field=(label,input)=>{const node=el('label',label);input.setAttribute('aria-label',label);node.append(input);return node;};
+  const select=(options,value='')=>{const node=el('select');options.forEach(([id,label])=>{const item=el('option',label);item.value=id;node.append(item);});node.value=value;return node;};
+  const input=(value='',type='text')=>{const node=el('input');node.type=type;node.value=value??'';return node;};
+  const clone=value=>JSON.parse(JSON.stringify(value));
+  const mark=()=>{dirty=true;status.textContent='طراحی تغییر کرده؛ برای نگهداری، ذخیره کنید.';};
+  async function api(url,payload){const response=await fetch(url,{method:payload===undefined?'GET':'POST',headers:payload===undefined?{}:{'Content-Type':'application/json','X-CSRFToken':token},body:payload===undefined?undefined:JSON.stringify(payload)});const data=await response.json();if(!response.ok)throw Error(data.error||'درخواست انجام نشد.');return data;}
+  function message(error){status.textContent=error.message||'ارتباط برقرار نشد.';}
+  const number=value=>value===null||value===undefined?'نامشخص':new Intl.NumberFormat('fa-IR',{maximumFractionDigits:2}).format(value);
+  const sourceOptions=()=>Object.entries(metadata).map(([id,s])=>[id,s.label]);
+  const fieldOptions=(source,numeric=false)=>Object.entries(metadata[source]?.fields||{}).filter(([,f])=>!numeric||f.type==='number').map(([id,f])=>[id,f.label+(f.nonempty===0?' · بدون مقدار دریافت‌شده':'')]);
+  const kinds=[['kpi','کارت شاخص'],['bars','میله‌ای'],['columns','ستونی'],['line','خطی / روند'],['ring','حلقه‌ای'],['pie','دایره‌ای'],['stacked','میله انباشته'],['table','جدول داده'],['pivot','جدول محوری']];
+  const aggregates=[['count','تعداد رکورد'],['distinct_count','تعداد یکتا'],['sum','جمع'],['average','میانگین'],['min','کمینه'],['max','بیشینه']];
+  const operators=[['eq','برابر'],['ne','نابرابر'],['in','یکی از مقادیر'],['contains','شامل متن'],['gt','بیشتر از'],['gte','حداقل'],['lt','کمتر از'],['lte','حداکثر'],['between','بین دو مقدار'],['empty','بدون مقدار'],['not_empty','دارای مقدار']];
+  function displayDate(value){if(!value)return 'نامشخص';const d=new Date(value);return Number.isNaN(d.getTime())?String(value):new Intl.DateTimeFormat('fa-IR',{dateStyle:'short',timeStyle:'short'}).format(d);}
+  const editor=document.getElementById('report-editor'),editorBody=document.getElementById('report-editor-body');
+  document.querySelectorAll('[data-report-close]').forEach(b=>b.addEventListener('click',()=>b.closest('dialog').close()));
+  function openEditor(heading){document.getElementById('report-editor-title').textContent=heading;editorBody.replaceChildren();editor.showModal();}
+  function filterEditor(node,source,depth=0){
+    const wrap=el('div',null,'report-filter-group');
+    if(!node.logic){node.logic='and';node.children=[];}
+    const mode=select([['and','همه شرط‌ها (AND)'],['or','حداقل یک شرط (OR)']],node.logic);mode.addEventListener('change',()=>node.logic=mode.value);wrap.append(mode);
+    const body=el('div');wrap.append(body);
+    function redraw(){body.replaceChildren();node.children.forEach((child,index)=>{
+      const row=el('div',null,'report-condition');
+      if(child.logic){row.append(filterEditor(child,source,depth+1));}
+      else{
+        const f=select(fieldOptions(source),child.field),op=select(operators,child.op),v=input(Array.isArray(child.value)?child.value.join(' | '):child.value);
+        f.setAttribute('aria-label','فیلد شرط');op.setAttribute('aria-label','عملگر شرط');v.setAttribute('aria-label','مقدار شرط');v.placeholder='چند مقدار با | ؛ تاریخ ۱۴۰۵/۰۱/۰۱';
+        const sync=()=>{child.field=f.value;child.op=op.value;child.value=['in','between'].includes(op.value)?v.value.split('|').map(x=>x.trim()).filter(Boolean):v.value;v.hidden=['empty','not_empty'].includes(op.value);};
+        [f,op,v].forEach(n=>n.addEventListener(n===v?'input':'change',sync));row.append(f,op,v);
+      }
+      row.append(button('حذف شرط',()=>{node.children.splice(index,1);redraw();}));body.append(row);
+    });}
+    wrap.append(button('افزودن شرط',()=>{node.children.push({field:fieldOptions(source)[0]?.[0]||'',op:'eq',value:''});redraw();}));
+    if(depth<3)wrap.append(button('افزودن گروه AND / OR',()=>{node.children.push({logic:'and',children:[]});redraw();}));redraw();return wrap;
+  }
+  function cleanFilter(node){if(node.logic){const children=node.children.map(cleanFilter).filter(Boolean);return children.length?{logic:node.logic,children}:null;}return node;}
+  function chooseFields(source,selected,onChange){const box=el('div',null,'report-field-list');fieldOptions(source).forEach(([id,label])=>{const check=input('','checkbox');check.checked=selected.includes(id);check.addEventListener('change',()=>onChange(id,check.checked));box.append(field(label,check));});return box;}
+  function editWidget(original){
+    const spec=original?clone(original):{id:'w-'+crypto.randomUUID(),source:'dynamic',kind:'bars',title:'',width:6,height:'normal',hidden:false,query:{source:Object.keys(metadata)[0],dimensions:[],metric:{aggregate:'count'},filter:null,empty:'keep',order:'value_desc',columns:[]}};
+    if(spec.source!=='dynamic'){spec.source='dynamic';spec.query={source:'cases',dimensions:[],metric:{aggregate:'count'},filter:null,empty:'keep',order:'value_desc',columns:[]};delete spec.split;delete spec.contains;}
+    openEditor(original?'ویرایش ابزارک':'افزودن ابزارک');
+    const base=el('div',null,'report-form-grid'),name=input(spec.title),source=select(sourceOptions(),spec.query.source),kind=select(kinds,spec.kind);
+    base.append(field('عنوان ابزارک',name),field('منبع داده',source),field('نوع نمایش',kind));editorBody.append(base);
+    const settings=el('div');editorBody.append(settings);let readSettings=()=>{};
+    function draw(){settings.replaceChildren();const q=spec.query;
+      const coverage=metadata[q.source]?.coverage;settings.append(el('p',(coverage?.source_name||'دریافت نشده')+' · '+number(coverage?.count)+' رکورد · '+displayDate(coverage?.received),'report-footnote'));
+      if(metadata[q.source]?.relations?.length)settings.append(el('p','روابط معتبر: '+metadata[q.source].relations.map(r=>r.label).join('، '),'report-footnote'));
+      const grid=el('div',null,'report-form-grid'),aggregate=select(aggregates,q.metric.aggregate),measureField=select([['','انتخاب فیلد'],...fieldOptions(q.source)],q.metric.field||''),empty=select([['keep','مقادیر خالی: جدا / نامشخص'],['exclude','حذف گروه با بُعد خالی'],['zero','مقدار عددی خالی: صفر (انتخاب صریح)']],q.empty||'keep'),order=select([['value_desc','مقدار: زیاد به کم'],['value_asc','مقدار: کم به زیاد'],['label_asc','دسته / زمان: صعودی'],['label_desc','دسته / زمان: نزولی']],q.order||'value_desc');
+      grid.append(field('تجمیع',aggregate),field('فیلد شاخص (برای تعداد لازم نیست)',measureField),field('مقادیر خالی',empty),field('ترتیب',order));settings.append(grid);
+      const formulaBox=el('details',null,'report-section');formulaBox.append(el('summary','شاخص محاسباتی بدون کدنویسی'));
+      const useFormula=input('','checkbox');useFormula.checked=!!q.metric.formula;
+      useFormula.addEventListener('change',()=>{if(useFormula.checked&&aggregate.value==='count')aggregate.value='sum';});
+      const operandOptions=[['constant','عدد ثابت'],...fieldOptions(q.source,true)],left=select(operandOptions,typeof q.metric.formula?.left==='object'?q.metric.formula.left.field:'constant'),right=select(operandOptions,typeof q.metric.formula?.right==='object'?q.metric.formula.right.field:'constant'),leftValue=input(typeof q.metric.formula?.left==='number'?q.metric.formula.left:1,'number'),rightValue=input(typeof q.metric.formula?.right==='number'?q.metric.formula.right:1,'number'),operation=select([['+','جمع'],['-','تفریق'],['*','ضرب'],['/','تقسیم']],q.metric.formula?.operator||'/');
+      const fg=el('div',null,'report-form-grid');fg.append(field('فرمول فعال باشد',useFormula),field('عملوند اول',left),field('عدد ثابت اول',leftValue),field('عملگر',operation),field('عملوند دوم',right),field('عدد ثابت دوم',rightValue));formulaBox.append(fg,el('p','فرمول برای هر رکورد محاسبه و سپس تجمیع می‌شود. تقسیم بر صفر و داده ناقص، نامشخص‌اند.','report-footnote'));settings.append(formulaBox);
+      const dimensions=el('section',null,'report-section');dimensions.append(el('h3','ابعاد؛ حداکثر چهار بُعد'));
+      const dimBody=el('div');dimensions.append(dimBody);let dims=clone(q.dimensions||[]);
+      function dimsDraw(){dimBody.replaceChildren();dims.forEach((d,index)=>{const row=el('div',null,'report-condition'),f=select(fieldOptions(q.source),d.field),bucket=select([['','بدون دوره‌بندی'],['day','روز شمسی'],['week','هفته؛ شروع شنبه'],['month','ماه شمسی'],['year','سال شمسی']],d.bucket||'');f.setAttribute('aria-label','فیلد بُعد '+(index+1));bucket.setAttribute('aria-label','دوره زمانی بُعد '+(index+1));f.addEventListener('change',()=>d.field=f.value);bucket.addEventListener('change',()=>d.bucket=bucket.value);row.append(f,bucket,button('حذف بُعد',()=>{dims.splice(index,1);dimsDraw();}));dimBody.append(row);});}
+      dimensions.append(button('افزودن بُعد',()=>{if(dims.length<4){dims.push({field:fieldOptions(q.source)[0][0],bucket:''});dimsDraw();}}));dimsDraw();settings.append(dimensions);
+      const filter=clone(q.filter||{logic:'and',children:[]}),filterWrap=el('section',null,'report-section');filterWrap.append(el('h3','شرط‌های اختصاصی این ابزارک'),filterEditor(filter,q.source));settings.append(filterWrap);
+      let columns=[...(q.columns||[])];const columnBox=el('details',null,'report-section');columnBox.append(el('summary','ستون‌های جدول و جزئیات'),chooseFields(q.source,columns,(id,on)=>{columns=on?[...columns,id]:columns.filter(c=>c!==id);}));settings.append(columnBox);
+      readSettings=()=>{q.dimensions=kind.value==='kpi'?[]:dims;q.metric={aggregate:aggregate.value};if(useFormula.checked)q.metric.formula={left:left.value==='constant'?Number(leftValue.value):{field:left.value},operator:operation.value,right:right.value==='constant'?Number(rightValue.value):{field:right.value}};else if(aggregate.value!=='count')q.metric.field=measureField.value;q.filter=cleanFilter(filter);q.empty=empty.value;q.order=order.value;q.columns=columns;};
+    }
+    source.addEventListener('change',()=>{spec.query={source:source.value,dimensions:[],metric:{aggregate:'count'},filter:null,empty:'keep',order:'value_desc',columns:[]};draw();});
+    kind.addEventListener('change',()=>{readSettings();if(kind.value==='line')spec.query.order='label_asc';draw();});draw();
+    const error=el('p',null,'report-warning');editorBody.append(error,button('اعمال و پیش‌نمایش',async()=>{
+      try{readSettings();spec.kind=kind.value;spec.title=name.value.trim()||metadata[source.value].label;
+        const next=original?widgets.map(w=>w.id===original.id?spec:w):[...widgets,spec];if(next.length>30)throw Error('حداکثر ۳۰ ابزارک مجاز است.');
+        await api('/dashboards/data/preview/',{widgets:next,configuration,values,widget:spec.id});widgets=next;mark();editor.close();await refresh();
+      }catch(e){error.textContent=e.message;}
+    },'button primary'));
+  }
+  function settingsDialog(){
+    openEditor('تنظیم داشبورد و فیلترهای عمومی');const name=input(title),description=el('textarea');description.value=configuration.description||'';const base=el('div',null,'report-form-grid');base.append(field('عنوان داشبورد',name),field('توضیحات',description));editorBody.append(base);
+    const filters=clone(configuration.filters||[]),body=el('div');editorBody.append(body);
+    function draw(){body.replaceChildren();filters.forEach((f,index)=>{
+      const section=el('section',null,'report-section'),grid=el('div',null,'report-form-grid'),label=input(f.label),source=select(sourceOptions(),f.source),column=select(fieldOptions(f.source),f.field),control=select([['single','انتخاب تکی'],['multi','انتخاب چندگانه'],['text','متن / جست‌وجو'],['number','عدد'],['range','بازه عددی'],['date_range','بازه تاریخ شمسی']],f.control),op=select(operators.filter(([id])=>['eq','in','contains','between','gte','lte'].includes(id)),f.op),def=input(Array.isArray(f.default)?f.default.join(' | '):f.default||'');
+      grid.append(field('عنوان فیلتر',label),field('منبع',source),field('فیلد',column),field('نوع کنترل',control),field('شرط',op),field('مقدار پیش‌فرض؛ بازه / چند مقدار با |',def));section.append(grid);
+      const parents=el('div',null,'report-field-list');parents.append(el('span','وابسته به:'));
+      filters.filter(p=>p.id!==f.id&&p.source===f.source).forEach(p=>{const c=input('','checkbox');c.checked=(f.parents||[]).includes(p.id);c.addEventListener('change',()=>f.parents=c.checked?[...(f.parents||[]),p.id]:(f.parents||[]).filter(id=>id!==p.id));parents.append(field(p.label,c));});section.append(parents);
+      const targets=el('div',null,'report-field-list');targets.append(el('span','ابزارک‌های هدف؛ انتخاب خالی یعنی همه ابزارک‌های همین منبع:'));
+      widgets.filter(w=>w.query?.source===f.source).forEach(w=>{const c=input('','checkbox');c.checked=(f.targets||[]).includes(w.id);c.addEventListener('change',()=>f.targets=c.checked?[...(f.targets||[]),w.id]:(f.targets||[]).filter(id=>id!==w.id));targets.append(field(w.title||w.id,c));});section.append(targets);
+      label.addEventListener('input',()=>f.label=label.value);column.addEventListener('change',()=>f.field=column.value);op.addEventListener('change',()=>{f.op=op.value;f.default=['in','between'].includes(f.op)?def.value.split('|').map(s=>s.trim()).filter(Boolean):def.value;});def.addEventListener('input',()=>f.default=['in','between'].includes(f.op)?def.value.split('|').map(s=>s.trim()).filter(Boolean):def.value);
+      source.addEventListener('change',()=>{f.source=source.value;f.field=fieldOptions(f.source)[0][0];f.parents=[];f.targets=[];f.default='';draw();});
+      control.addEventListener('change',()=>{f.control=control.value;f.op=['multi'].includes(f.control)?'in':['range','date_range'].includes(f.control)?'between':f.control==='text'?'contains':'eq';op.value=f.op;});
+      section.append(button('حذف فیلتر',()=>{filters.splice(index,1);filters.forEach(other=>other.parents=(other.parents||[]).filter(id=>id!==f.id));draw();}));body.append(section);
+    });}
+    draw();editorBody.append(button('افزودن فیلتر عمومی',()=>{if(filters.length>=12)return;const source=Object.keys(metadata)[0];filters.push({id:'f-'+crypto.randomUUID(),label:'فیلتر '+(filters.length+1),source,field:fieldOptions(source)[0][0],op:'eq',control:'single',parents:[],targets:[],default:''});draw();}));
+    const error=el('p',null,'report-warning');editorBody.append(error,button('اعمال تنظیمات',async()=>{try{const next={version:2,description:description.value,filters};await api('/dashboards/data/preview/',{widgets,configuration:next,values:{}});configuration=next;title=name.value.trim();values={};mark();editor.close();await renderFilters();await refresh();}catch(e){error.textContent=e.message;}},'button primary'));
+  }
+  function ancestorNodes(filter,trail=new Set()){const nodes=[];for(const id of filter.parents||[]){if(trail.has(id))continue;trail.add(id);const p=configuration.filters.find(f=>f.id===id);if(!p)continue;nodes.push(...ancestorNodes(p,trail));const v=values[id]??p.default;if(v!==undefined&&v!==''&&v!==null&&(!Array.isArray(v)||v.length))nodes.push({field:p.field,op:p.op,value:v});}return nodes;}
+  async function renderFilters(){
+    const box=document.getElementById('report-filters');box.replaceChildren();
+    for(const f of configuration.filters||[]){let control;const value=values[f.id]??f.default??'';
+      if(['single','multi'].includes(f.control)){
+        control=select([['','همه']], '');if(f.control==='multi')control.multiple=true;
+        try{const response=await api('/dashboards/data/options/',{source:f.source,field:f.field,filters:ancestorNodes(f)});response.options.forEach(v=>control.add(new Option(v,v)));if(response.limited)box.append(el('small','گزینه‌های این فیلتر بیش از ۱۰۰۰ مورد است؛ ابتدا فیلتر بالادستی را محدود کنید.'));if(Array.isArray(value))Array.from(control.options).forEach(o=>o.selected=value.includes(o.value));else control.value=value;}catch(e){message(e);}
+      }else{control=input(Array.isArray(value)?value.join(' | '):value);control.placeholder=f.control==='date_range'?'۱۴۰۵/۰۱/۰۱ | ۱۴۰۵/۱۲/۲۹':['range'].includes(f.control)?'حداقل | حداکثر':'مقدار فیلتر';}
+      control.addEventListener('change',async()=>{
+        values[f.id]=f.control==='multi'?Array.from(control.selectedOptions).map(o=>o.value).filter(Boolean):['range','date_range'].includes(f.control)?control.value.split('|').map(s=>s.trim()).filter(Boolean):control.value;
+        const descendants=new Set([f.id]);let changed=true;while(changed){changed=false;configuration.filters.forEach(other=>{if(!descendants.has(other.id)&&(other.parents||[]).some(id=>descendants.has(id))){descendants.add(other.id);values[other.id]='';changed=true;}});}
+        await renderFilters();await refresh();
+      });box.append(field(f.label,control));
+    }
+  }
+  const svgEl=(tag,attributes={})=>{const n=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attributes))n.setAttribute(k,String(v));return n;};
+  function graphicLink(node,row,spec){const link=svgEl('a',{href:'#report-details',tabindex:0,'aria-label':row.label+'؛ '+number(row.value)+'؛ مشاهده رکوردها'});link.append(node);link.addEventListener('click',e=>{e.preventDefault();showDetails(spec,row.group,1);});return link;}
+  function tableRows(container,spec,data){
+    const wrap=el('div',null,'table-wrap'),table=el('table',null,'report-chart-table'),head=el('thead'),tr=el('tr');
+    ['گروه','مقدار شاخص','رکورد','مقدار خالی'].forEach(v=>tr.append(el('th',v)));head.append(tr);table.append(head);const tbody=el('tbody');
+    table.append(tbody);wrap.append(table);container.append(wrap);
+    pagedRows(container,data.rows,items=>{tbody.replaceChildren();items.forEach(row=>{const r=el('tr'),cell=el('td');cell.append(button(row.label,()=>showDetails(spec,row.group,1)));r.append(cell,el('td',number(row.value)),el('td',number(row.count)),el('td',number(row.missing)));tbody.append(r);});});
+  }
+  function pagedRows(container,rows,draw){let page=0;const controls=el('div',null,'report-toolbar');const render=()=>{draw(rows.slice(page*25,(page+1)*25));controls.replaceChildren();if(rows.length>25){const previous=button('قبلی',()=>{page--;render();}),next=button('بعدی',()=>{page++;render();});previous.disabled=page===0;next.disabled=(page+1)*25>=rows.length;controls.append(previous,el('span','صفحه '+number(page+1)+' از '+number(Math.ceil(rows.length/25))),next);}};container.append(controls);render();}
+  function renderGraphic(container,spec,data){
+    const rows=data.rows||[];
+    if(spec.kind==='table'){tableRows(container,spec,data);return;}
+    if(spec.kind==='kpi'){const row=rows[0];container.append(button(number(row?.value),()=>showDetails(spec,row?.group,1),'report-kpi'));return;}
+    if(!rows.length){container.append(el('p','رکوردی با این شرط‌ها وجود ندارد.','report-empty'));return;}
+    if(rows.length>100&&spec.kind!=='pivot'){container.append(el('p','بیش از ۱۰۰ گروه؛ برای خوانایی، فیلتر یا ابعاد را محدود کنید. همه گروه‌ها در جدول زیر هستند.','report-warning'));tableRows(container,spec,data);return;}
+    if(spec.kind==='pivot'&&spec.query?.dimensions.length>1){
+      const cols=[...new Set(rows.map(r=>r.dimensions.slice(1).map(x=>x??'نامشخص').join(' · ')))],keys=[...new Set(rows.map(r=>r.dimensions[0]??'نامشخص'))],table=el('table',null,'report-chart-table'),h=el('tr');h.append(el('th','بُعد اول'));cols.forEach(c=>h.append(el('th',c)));const head=el('thead');head.append(h);table.append(head);const body=el('tbody');table.append(body);const wrap=el('div',null,'table-wrap');wrap.append(table);container.append(wrap);pagedRows(container,keys,items=>{body.replaceChildren();items.forEach(k=>{const tr=el('tr');tr.append(el('th',k));cols.forEach(c=>{const td=el('td'),r=rows.find(r=>(r.dimensions[0]??'نامشخص')===k&&r.dimensions.slice(1).map(x=>x??'نامشخص').join(' · ')===c);td.append(r?button(number(r.value),()=>showDetails(spec,r.group,1)):el('span','—'));tr.append(td);});body.append(tr);});});return;
+    }
+    const nums=rows.map(r=>Number(r.value)||0),max=Math.max(1,...nums.map(Math.abs));
+    if(['ring','pie'].includes(spec.kind)){
+      if(nums.some(n=>n<0)||!nums.some(n=>n>0)){container.append(el('p','نمودار سهم برای مقادیر منفی، صفر یا نامشخص مناسب نیست.'));tableRows(container,spec,data);return;}
+      const sum=nums.reduce((a,b)=>a+b,0),svg=svgEl('svg',{viewBox:'0 0 240 200',role:'img','aria-label':spec.title});let offset=0;
+      rows.forEach((r,i)=>{const part=nums[i]/sum;if(part<=0)return;const angle=offset*2*Math.PI-Math.PI/2,end=(offset+part)*2*Math.PI-Math.PI/2;
+        let shape;if(part>=.999999)shape=svgEl('circle',{cx:120,cy:100,r:70,class:'report-series-'+i%6});else shape=svgEl('path',{d:`M120 100 L${120+70*Math.cos(angle)} ${100+70*Math.sin(angle)} A70 70 0 ${part>.5?1:0} 1 ${120+70*Math.cos(end)} ${100+70*Math.sin(end)} Z`,class:'report-series-'+i%6});svg.append(graphicLink(shape,r,spec));offset+=part;});
+      if(spec.kind==='ring')svg.append(svgEl('circle',{cx:120,cy:100,r:43,fill:'var(--surface)'}));container.append(svg);
+    }else if(spec.kind==='line'){
+      const svg=svgEl('svg',{viewBox:'0 0 600 220',role:'img','aria-label':spec.title}),min=Math.min(0,...nums),high=Math.max(1,...nums),range=high-min;
+      const points=rows.map((r,i)=>[30+i*540/Math.max(1,rows.length-1),190-(nums[i]-min)*160/range]);svg.append(svgEl('polyline',{points:points.map(p=>p.join(',')).join(' '),class:'report-series-0 report-line'}));points.forEach((p,i)=>svg.append(graphicLink(svgEl('circle',{cx:p[0],cy:p[1],r:5,class:'report-series-0'}),rows[i],spec)));container.append(svg,el('small',rows[0].label+' ← '+rows[rows.length-1].label+' · دامنه مقدار: '+number(min)+' تا '+number(high),'report-footnote'));
+    }else if(spec.kind==='columns'){
+      const svg=svgEl('svg',{viewBox:'0 0 600 230',role:'img','aria-label':spec.title}),negative=nums.some(n=>n<0),baseline=negative?110:200,scale=negative?90:180,w=540/rows.length;
+      rows.forEach((r,i)=>{const h=Math.abs(nums[i])*scale/max;svg.append(graphicLink(svgEl('rect',{x:30+i*w,y:nums[i]<0?baseline:baseline-h,width:Math.max(2,w-5),height:h,class:'report-series-'+i%6}),r,spec));});svg.append(svgEl('line',{x1:25,y1:baseline,x2:575,y2:baseline,stroke:'var(--line)'}));container.append(svg);
+    }else if(spec.kind==='stacked'&&spec.query?.dimensions.length>1&&nums.every(n=>n>=0)){
+      const groups=new Map(),series=[...new Set(rows.map(r=>r.dimensions.slice(1).join(' · ')))];rows.forEach(r=>{const k=r.dimensions[0]??'نامشخص';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(r);});const peak=Math.max(1,...Array.from(groups.values()).map(rs=>rs.reduce((s,r)=>s+(Number(r.value)||0),0)));
+      groups.forEach((rs,label)=>{container.append(el('div',label));const svg=svgEl('svg',{viewBox:'0 0 600 24',role:'img','aria-label':label});let x=0;rs.forEach(r=>{const width=(Number(r.value)||0)*580/peak;svg.append(graphicLink(svgEl('rect',{x,y:2,width,height:18,class:'report-series-'+series.indexOf(r.dimensions.slice(1).join(' · '))%6}),r,spec));x+=width;});container.append(svg);});
+    }else{
+      rows.forEach((r,i)=>{const row=el('div',null,'report-row');row.append(button(r.label,()=>showDetails(spec,r.group,1)),el('strong',number(r.value)));container.append(row);const negative=nums.some(n=>n<0),base=negative?300:0,width=Math.abs(nums[i])*(negative?280:580)/max,svg=svgEl('svg',{viewBox:'0 0 600 20',role:'img','aria-label':r.label});svg.append(graphicLink(svgEl('rect',{x:nums[i]<0?base-width:base,y:2,width,height:14,class:'report-series-'+i%6}),r,spec));container.append(svg);});return;
+    }
+    const legend=el('div',null,'report-legend');rows.forEach(r=>legend.append(button(r.label+' · '+number(r.value),()=>showDetails(spec,r.group,1))));container.append(legend);
+  }
+  function render(){
+    canvas.replaceChildren();host.querySelector('h1').textContent=title;document.getElementById('report-description').textContent=configuration.description||'';
+    if(!widgets.length)canvas.append(el('p','داشبورد خالی است؛ «افزودن ابزارک» را بزنید و منبع، شاخص و ابعاد را انتخاب کنید.','report-empty'));
+    widgets.forEach((spec,index)=>{
+      if(shared&&spec.hidden)return;const tile=el('article',null,`dashboard-tile report-widget tile-width-${spec.width} tile-height-${spec.height}${spec.hidden?' report-hidden':''}`);tile.dataset.widgetId=spec.id;
+      if(!shared){const bar=el('div',null,'report-widget-controls'),drag=button('⠿',()=>{});drag.draggable=true;drag.setAttribute('aria-label','کشیدن ابزارک برای جابه‌جایی');drag.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',spec.id));tile.addEventListener('dragover',e=>{e.preventDefault();tile.classList.add('report-drop');});tile.addEventListener('dragleave',()=>tile.classList.remove('report-drop'));tile.addEventListener('drop',e=>{e.preventDefault();const from=widgets.findIndex(w=>w.id===e.dataTransfer.getData('text/plain'));if(from<0)return;const [w]=widgets.splice(from,1);widgets.splice(index,0,w);mark();render();});
+        const move=step=>{if(index+step<0||index+step>=widgets.length)return;[widgets[index],widgets[index+step]]=[widgets[index+step],widgets[index]];mark();render();};
+        const width=select([[1,'یک‌نهم'],[2,'یک‌ششم'],[3,'یک‌چهارم'],[4,'یک‌سوم'],[6,'نصف'],[8,'دوسوم'],[12,'کامل']],String(spec.width)),height=select([['mini','خیلی کوتاه'],['compact','کوتاه'],['normal','معمولی'],['tall','بلند']],spec.height);width.setAttribute('aria-label','عرض ابزارک');height.setAttribute('aria-label','ارتفاع ابزارک');width.addEventListener('change',()=>{spec.width=Number(width.value);mark();render();});height.addEventListener('change',()=>{spec.height=height.value;mark();render();});
+        const stack=input('','checkbox');stack.checked=!!spec.stack;stack.addEventListener('change',()=>{spec.stack=stack.checked;mark();render();});bar.append(field('زیر ابزارک قبلی',stack));
+        const resize=button('◲',()=>{});resize.className='small-button report-resize';resize.setAttribute('aria-label','تغییر اندازه با کشیدن');resize.addEventListener('pointerdown',event=>{if(event.button!==0)return;const x=event.clientX,y=event.clientY,w=tile.getBoundingClientRect().width,h=tile.getBoundingClientRect().height;resize.setPointerCapture(event.pointerId);const move=e=>{const target=(w+x-e.clientX)/(canvas.getBoundingClientRect().width/12);spec.width=[1,2,3,4,6,8,12].reduce((a,b)=>Math.abs(b-target)<Math.abs(a-target)?b:a);spec.height=h+e.clientY-y<160?'mini':h+e.clientY-y<260?'compact':h+e.clientY-y>480?'tall':'normal';width.value=String(spec.width);height.value=spec.height;tile.className=`dashboard-tile report-widget tile-width-${spec.width} tile-height-${spec.height}`;};const finish=()=>{resize.removeEventListener('pointermove',move);resize.removeEventListener('pointerup',finish);resize.removeEventListener('pointercancel',finish);mark();render();};resize.addEventListener('pointermove',move);resize.addEventListener('pointerup',finish);resize.addEventListener('pointercancel',finish);});bar.append(resize);
+        bar.append(drag,button('↑',()=>move(-1)),button('↓',()=>move(1)),button('تنظیم',()=>editWidget(spec)),width,height,button(spec.hidden?'نمایش':'پنهان',()=>{spec.hidden=!spec.hidden;mark();render();}),button('حذف',()=>{widgets=widgets.filter(w=>w.id!==spec.id);configuration.filters.forEach(f=>f.targets=(f.targets||[]).filter(id=>id!==spec.id));mark();render();}));tile.append(bar);
+      }
+      tile.append(el('h2',spec.title||'ابزارک'));const data=results.get(spec.id);
+      if(!data)tile.append(el('p','در انتظار پیش‌نمایش…'));else if(data.coverage&&!data.coverage.available)tile.append(el('p','برای این منبع / شواهد، دریافت موفق موجود نیست.'));else{renderGraphic(tile,spec,data);if(data.coverage)tile.append(el('p',data.coverage.source_name+' · '+displayDate(data.coverage.received)+' · '+number(data.record_count)+' رکورد در انتخاب','report-footnote'));if(data.legacy)tile.append(el('p','ابزارک قدیمی حفظ شده است؛ با «تنظیم» می‌توانید آن را به طرح عمومی تبدیل کنید.','report-footnote'));tile.append(button('رکوردهای تشکیل‌دهنده',()=>showDetails(spec,null,1)));}canvas.append(tile);
+    });
+    let stack=null;Array.from(canvas.children).filter(n=>n.dataset.widgetId).forEach(tile=>{const spec=widgets.find(w=>w.id===tile.dataset.widgetId);if(!stack||!spec.stack){stack=el('div',null,'dashboard-stack tile-width-'+spec.width);canvas.insertBefore(stack,tile);}stack.append(tile);});
+  }
+  async function refresh(){const mine=++requestNumber;status.textContent='در حال محاسبه گزارش از داده دریافت‌شده…';try{const data=await api('/dashboards/data/preview/',{widgets,configuration,values});if(mine!==requestNumber)return;results=new Map(data.widgets.map(w=>[w.id,w]));render();status.textContent=dirty?'پیش‌نمایش آماده است؛ طراحی هنوز ذخیره نشده.':'گزارش آماده است.';}catch(e){if(mine===requestNumber)message(e);}}
+  async function showDetails(spec,group,page){const dialog=document.getElementById('report-records'),body=document.getElementById('report-records-body');document.getElementById('report-records-title').textContent=spec.title+' · رکوردهای تشکیل‌دهنده';if(!dialog.open)dialog.showModal();body.replaceChildren(el('p','در حال دریافت…'));try{const data=(await api('/dashboards/data/preview/',{widgets,configuration,values,widget:spec.id,group,page})).widgets[0];body.replaceChildren();if(data.legacy){body.append(el('p','جزئیات ابزارک قدیمی در نمای قبلی آن در دسترس است.'));return;}const table=el('table',null,'report-chart-table'),head=el('thead'),tr=el('tr');data.columns.forEach(c=>tr.append(el('th',c.label)));tr.append(el('th','بررسی'));head.append(tr);table.append(head);const tbody=el('tbody');data.records.forEach(r=>{const row=el('tr');r.values.forEach((v,i)=>row.append(el('td',v===null||v===undefined||v===''?'نامشخص':data.columns[i].type==='date'?displayDate(v):String(v))));const td=el('td');if(r.url){const link=el('a','↗');link.href=r.url;link.setAttribute('aria-label','بررسی رکورد');td.append(link);}row.append(td);tbody.append(row);});table.append(tbody);const wrap=el('div',null,'table-wrap');wrap.append(table);body.append(el('p',number(data.detail_count)+' رکورد · صفحه '+number(data.page)),wrap);if(data.page>1)body.append(button('قبلی',()=>showDetails(spec,group,data.page-1)));if(data.page*50<data.detail_count)body.append(button('بعدی',()=>showDetails(spec,group,data.page+1)));}catch(e){body.replaceChildren(el('p',e.message));}}
+  async function save(){const data=await api('/preferences/dashboards/'+key+'/',{widgets,configuration,revision,title});revision=data.revision;dirty=false;status.textContent='طراحی ذخیره شد.';}
+  try{metadata=(await api('/dashboards/data/metadata/')).sources;if(!shared){const saved=await api('/preferences/dashboards/'+key+'/');publicationRevision=saved.publication_revision||0;document.getElementById('report-publish').hidden=!saved.can_publish;document.getElementById('report-withdraw').hidden=!saved.can_publish||!saved.published;}}catch(e){message(e);return;}
+  document.getElementById('report-refresh').addEventListener('click',refresh);
+  if(!shared){document.getElementById('report-add').addEventListener('click',()=>editWidget());document.getElementById('report-settings').addEventListener('click',settingsDialog);document.getElementById('report-save').addEventListener('click',()=>save().catch(message));
+    for(const [id,enabled] of [['report-publish',true],['report-withdraw',false]])document.getElementById(id).addEventListener('click',async()=>{try{if(enabled)await save();const data=await api('/preferences/dashboards/'+key+'/publish/',{revision,publication_revision:publicationRevision,enabled});publicationRevision=data.publication_revision;document.getElementById('report-withdraw').hidden=!enabled;status.textContent=enabled?'داشبورد برای همکاران منتشر شد.':'انتشار مشترک لغو شد.';}catch(e){message(e);}});
+    document.getElementById('report-export').addEventListener('click',()=>{const blob=new Blob([JSON.stringify({format:'service-dashboard-v2',title,widgets,configuration},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=el('a');a.href=url;a.download='dashboard-design.json';a.click();URL.revokeObjectURL(url);});
+    document.getElementById('report-import').addEventListener('change',async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>200000)throw Error('فایل بیش از حد بزرگ است.');const data=JSON.parse(await file.text());if(data.format!=='service-dashboard-v2')throw Error('قالب پشتیبان معتبر نیست.');await api('/dashboards/data/preview/',{widgets:data.widgets,configuration:data.configuration,values:{}});widgets=data.widgets;configuration=data.configuration;title=String(data.title).slice(0,100);values={};mark();await renderFilters();await refresh();}catch(error){message(error);}});
+    document.getElementById('report-delete').addEventListener('submit',e=>{if(!confirm('داشبورد شخصی حذف شود؟ داده CRM تغییر نمی‌کند. نسخه مشترک باید جداگانه لغو انتشار شود.'))e.preventDefault();else dirty=false;});
+    window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+  }
+  await renderFilters();await refresh();
+})();

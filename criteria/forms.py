@@ -31,14 +31,14 @@ class RuleForm(forms.ModelForm):
     def __init__(self, *args, module, **kwargs):
         self.module = module
         super().__init__(*args, **kwargs)
-        self.fields['purpose'].widget = forms.Select(choices=[('attention', 'نیازمند رسیدگی')] + ([('opportunity', 'فرصت اقدام مشترک')] if module == 'planning' else [('completed', 'بازدید انجام‌شده'), ('pending', 'بازدید باقی‌مانده')] if module == 'backlogs' else []))
+        self.fields['purpose'].widget = forms.Select(choices=[('attention', 'نیازمند رسیدگی')] + ([('opportunity', 'فرصت اقدام مشترک'), ('upgrade_ready', 'قابل رفع با ارتقا؛ فرض مدیریتی')] if module == 'planning' else [('completed', 'بازدید انجام‌شده'), ('pending', 'بازدید باقی‌مانده'), ('upgrade_program', 'شناسایی برنامه ارتقا')] if module == 'backlogs' else []))
         self.fields['metric'].widget = forms.Select(choices=[(k, v[0]) for k, v in METRICS[module].items()])
         self.fields['operator'].widget = forms.Select(choices=list(OPERATORS.items()))
         self.fields['grouping'].widget = forms.Select(choices=[('customer_program', 'مشتری و برنامه مشترک'), ('customer', 'مشتری / مرکز مشترک')])
         if module == 'projects':
             self.fields['dashboard'].widget = forms.HiddenInput()
         elif module == 'backlogs':
-            self.fields['dashboard'].choices = [('', 'عمومی'), ('onsite', 'مراجعه حضوری'), ('periodic', 'بازدید دوره‌ای')]
+            self.fields['dashboard'].choices = [('', 'عمومی'), ('upgrade', 'ارتقا'), ('onsite', 'مراجعه حضوری'), ('periodic', 'بازدید دوره‌ای')]
         if self.instance.pk:
             value = self.instance.value
             self.initial['target_value'] = '\n'.join(str(v) for v in value) if isinstance(value, list) else ('بله' if value else 'خیر') if isinstance(value, bool) else str(value)
@@ -52,7 +52,7 @@ class RuleForm(forms.ModelForm):
     def clean(self):
         data = super().clean()
         metric = data.get('metric')
-        allowed_dashboards = {'planning': ('', 'upgrade', 'onsite'), 'backlogs': ('', 'onsite', 'periodic'), 'projects': ('',)}
+        allowed_dashboards = {'planning': ('', 'upgrade', 'onsite'), 'backlogs': ('', 'upgrade', 'onsite', 'periodic'), 'projects': ('',)}
         if data.get('dashboard', '') not in allowed_dashboards[self.module]:
             self.add_error('dashboard', 'داشبورد برای این ماژول معتبر نیست.')
         kind = METRICS[self.module].get(metric, ('', None))[1]
@@ -82,7 +82,7 @@ class RuleForm(forms.ModelForm):
             self.add_error('priority', 'عدد بین ۱ تا ۹ وارد کنید.')
         if not 2 <= data.get('min_count', 0) <= 10000:
             self.add_error('min_count', 'عدد بین ۲ تا ۱۰۰۰۰ وارد کنید.')
-        if data.get('purpose') not in (['attention', 'opportunity'] if self.module == 'planning' else ['attention', 'completed', 'pending'] if self.module == 'backlogs' else ['attention']):
+        if data.get('purpose') not in (['attention', 'opportunity', 'upgrade_ready'] if self.module == 'planning' else ['attention', 'completed', 'pending', 'upgrade_program'] if self.module == 'backlogs' else ['attention']):
             self.add_error('purpose', 'کاربرد معیار معتبر نیست.')
         if data.get('grouping') not in ('customer', 'customer_program'):
             self.add_error('grouping', 'مبنای گروه‌بندی معتبر نیست.')

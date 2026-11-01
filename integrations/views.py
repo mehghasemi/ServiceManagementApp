@@ -85,6 +85,10 @@ def dashboard(request):
     if request.GET.get('created_month'):
         from planning.charts import creation_month
         dashboard_cases=dashboard_cases.filter(pk__in=[c.pk for c in dashboard_cases if creation_month(c)==request.GET['created_month']])
+        from planning.reporting.engine import day
+        lower, upper = day(request.GET.get('trend_from')), day(request.GET.get('trend_to'))
+        if lower or upper:
+            dashboard_cases=dashboard_cases.filter(pk__in=[c.pk for c in dashboard_cases if (stamp:=day(c.evidence.get('created_on'))) and (not lower or stamp>=lower) and (not upper or stamp<=upper)])
     if request.GET.get('has_action')=='1':
         dashboard_cases=dashboard_cases.annotate(scope_actions=Count('local_actions',filter=open_actions_filter(request.user))).filter(scope_actions__gt=0)
     rows = dashboard_cases.annotate(open_actions=Count('local_actions', filter=open_actions_filter(request.user)))
@@ -105,12 +109,12 @@ def dashboard(request):
     chart_rows = status_distribution(dashboard_cases)
     action_coverage = round((total - without_action) * 100 / total, 1) if total else None
     visual_cases = list(dashboard_cases)
-    creation = creation_chart(visual_cases, timezone.localdate())
+    creation = creation_chart(visual_cases, timezone.localdate(), request.GET.get('trend_from'), request.GET.get('trend_to'))
     from planning.drilldown import chart_url
     for item in creation['rows']: item['url']=chart_url(request,created_month=item['label'])
     for item in chart_rows: item['url']=chart_url(request,status=item['source_status'],status_missing='1' if not item['source_status'] else '')
-    attention_creation = creation_chart([case for case in visual_cases if case.pk in hit_map], timezone.localdate())
-    unlinked_creation = creation_chart([case for case in visual_cases if not case.parent_id], timezone.localdate())
+    attention_creation = creation_chart([case for case in visual_cases if case.pk in hit_map], timezone.localdate(), request.GET.get('trend_from'), request.GET.get('trend_to'))
+    unlinked_creation = creation_chart([case for case in visual_cases if not case.parent_id], timezone.localdate(), request.GET.get('trend_from'), request.GET.get('trend_to'))
     customer_filter, parent_filter = customer_scope, parent_scope
     customer_label = (dashboard_cases.values_list('customer', flat=True).first() or 'مشتری انتخاب‌شده') if customer_filter else ''
     opportunity = opportunity_scope

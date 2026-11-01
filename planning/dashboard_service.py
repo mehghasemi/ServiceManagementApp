@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 from planning.charts import status_distribution, creation_chart
 
-BUILTINS = {'home','planning','today','projects','backlogs','periodic','onsite','upgrades','suggestions','actions','planning-attention','projects-attention'}
+BUILTINS = {'home','planning','today','projects','backlogs','periodic','onsite','upgrades','upgrade-execution','suggestions','actions','planning-attention','projects-attention'}
 CATALOG = {
  'case-status': ('وضعیت کیس‌ها','planning','ring'),
  'case-created': ('ماه ایجاد کیس‌های موجود','planning','line'),
@@ -44,7 +44,7 @@ def aggregate(records,source,split='',contains=''):
     rows=[{'label':a+(' · '+b if split else ''),'category':a,'series':b,'count':counts[(a,b)]} for a,b in pairs]
     return rows
 
-def chart_data(user, specs):
+def chart_data(user, specs, request=None):
     from integrations.views import active_snapshot, current_cases
     from projects.views import snapshot_for as projects_snapshot
     from planning.backlogs import snapshot_for as backlogs_snapshot
@@ -56,7 +56,7 @@ def chart_data(user, specs):
             datasets[module]=list(current_cases(user)) if module=='planning' else (snapshots[module].records if snapshots[module] else [])
         snapshot=snapshots[module];source=spec['source'];creation=None
         if source=='case-created':
-            creation=creation_chart(datasets[module],timezone.localdate());rows=creation['rows']
+            creation=creation_chart(datasets[module],timezone.localdate(),request.GET.get('trend_from') if request else None,request.GET.get('trend_to') if request else None);rows=creation['rows']
         else:
             rows=aggregate(datasets[module],source,spec.get('split',''),spec.get('contains',''))
         from .drilldown import widget_url

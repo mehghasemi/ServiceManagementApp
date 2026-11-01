@@ -101,7 +101,7 @@ class TodayTests(TestCase):
 
     def test_upgrade_version_click_selects_customers(self):
         self.case.customer_id=str(uuid.uuid4());self.case.customer='Selected';self.case.save()
-        response=self.client.get('/planning/upgrades/')
+        response=self.client.get('/planning/upgrades/?view=customers')
         chart=response.context['version_chart'][0]
         target=self.client.get(chart['url'].split('#')[0].replace('?', '/planning/upgrades/?',1))
         self.assertEqual(target.context['page'].paginator.count,chart['count'])

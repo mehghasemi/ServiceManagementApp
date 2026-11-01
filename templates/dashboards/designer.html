@@ -1,0 +1,19 @@
+{% extends 'base.html' %}{% load static service_ui %}{% block title %}{{ dashboard.title }}{% endblock %}{% block content %}
+<link rel="stylesheet" href="{% static 'report-designer.css' %}">
+<div id="report-designer" data-key="{{ dashboard.key }}" data-shared="{{ shared|yesno:'true,false' }}" data-revision="{{ dashboard.revision }}">
+<div class="compact-toolbar"><h1>{{ dashboard.title }}</h1><a href="{% url 'personal-dashboards' %}">داشبوردها</a><button class="help" aria-label="راهنمای داشبوردساز عمومی" data-help="از صفحه خالی شروع کنید؛ ابزارک، منبع داده، شاخص و ابعاد را انتخاب کنید. فیلتر هر ابزارک مستقل است؛ فیلترهای عمومی را به ابزارک‌های همان منبع متصل کنید. با انتخاب فیلتر بالادستی، گزینه‌های وابسته از داده مجاز شما تازه می‌شوند. پیش‌نمایش و کلیک نمودار فقط داده را می‌خوانند. برای نگهداری طراحی، ذخیره را بزنید؛ انتشار مشترک مخصوص ادمین است. منبع‌ها فقط Viewهای دریافت‌شده‌اند و تاریخ ایجاد، تاریخچه کامل کار نیست.">؟</button></div>
+{% csrf_token %}
+<div class="report-toolbar">
+{% if not shared %}<button type="button" class="button primary" id="report-add">افزودن ابزارک</button><button type="button" class="button secondary" id="report-settings">تنظیم داشبورد و فیلترها</button><button type="button" class="button primary" id="report-save">ذخیره</button><button type="button" class="button secondary" id="report-publish" hidden>انتشار برای همکاران</button><button type="button" class="button secondary" id="report-withdraw" hidden>لغو انتشار</button>{% endif %}
+<button type="button" class="button secondary" id="report-refresh">پیش‌نمایش داده</button>
+{% if not shared %}<button type="button" class="small-button" id="report-export">پشتیبان طراحی</button><label class="small-button">بازیابی طراحی<input type="file" id="report-import" accept="application/json,.json"></label><form method="post" action="{% url 'report-manage' dashboard.key %}">{% csrf_token %}<button class="small-button" name="action" value="copy">ساخت کپی</button></form><form method="post" action="{% url 'report-manage' dashboard.key %}" id="report-delete">{% csrf_token %}<button class="small-button" name="action" value="delete">حذف داشبورد شخصی</button></form>{% endif %}
+</div>
+<p id="report-description" class="muted"></p><p id="report-status" role="status" aria-live="polite"></p>
+<section id="report-filters" class="filters" aria-label="فیلترهای عمومی"></section>
+<div id="report-canvas" class="personal-dashboard-grid" aria-label="محیط طراحی داشبورد"></div>
+<dialog id="report-editor" class="report-dialog" aria-labelledby="report-editor-title"><div class="dialog-head"><h2 id="report-editor-title">تنظیم ابزارک</h2><button type="button" data-report-close aria-label="بستن پنجره">×</button></div><div id="report-editor-body"></div></dialog>
+<dialog id="report-records" class="report-dialog" aria-labelledby="report-records-title"><div class="dialog-head"><h2 id="report-records-title">رکوردهای تشکیل‌دهنده</h2><button type="button" data-report-close aria-label="بستن جزئیات">×</button></div><div id="report-records-body"></div></dialog>
+</div>
+{{ dashboard.widgets|json_script:'report-widgets' }}{{ dashboard.configuration|json_script:'report-configuration' }}
+<script src="{% static 'report-designer.js' %}" defer></script>
+{% endblock %}
