@@ -13,6 +13,7 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import render, redirect
 from integrations.models import SystemSettings, CRMView, ModuleSettings, EvaluationRule, SettingsAudit, SyncJob
 from .accounts import can_manage
+from .backup_bundles import LABELS, export_bundle, restore_bundle, decode_bundle
 
 MODELS = (SystemSettings, CRMView, ModuleSettings, EvaluationRule)
 
@@ -53,6 +54,7 @@ def restore_settings(token,key,actor):
         SettingsAudit.objects.create(actor=actor,area='settings-restore',after={'records':len(data['records'])})
 
 class BackupForm(forms.Form):
+    kind=forms.ChoiceField(label='نوع پشتیبان', choices=list(LABELS.items()), initial='local')
     directory=forms.CharField(label='مسیر پوشه پشتیبان روی سرور',max_length=1000,help_text='مسیر مطلق روی رایانه میزبان؛ حساب اجراکننده برنامه باید اجازه نوشتن داشته باشد.')
     def clean_directory(self):
         value=Path(self.cleaned_data['directory']).expanduser()
@@ -63,32 +65,42 @@ class BackupForm(forms.Form):
         return str(value)
 
 class RestoreForm(forms.Form):
-    backup=forms.FileField(label='فایل پشتیبان تنظیمات')
-    confirm=forms.BooleanField(label='جایگزینی تنظیمات موجود با مقادیر این پشتیبان را تأیید می‌کنم.')
+    kind=forms.ChoiceField(label='نوع فایل برای بازیابی', choices=[*LABELS.items(), ('legacy', 'فایل قدیمی فقط تنظیمات')], initial='local')
+    backup=forms.FileField(label='فایل پشتیبان')
+    confirm=forms.BooleanField(label='بازیابی بخش انتخاب‌شده و بازگرداندن مقادیر ذخیره‌شده را تأیید می‌کنم.')
 
 @login_required
 def backups(request):
     if not can_manage(request.user,request): return HttpResponseForbidden('فقط مدیر اجازه پشتیبان‌گیری و بازیابی دارد.')
     config=load_config()
-    form=BackupForm(request.POST if request.method=='POST' and request.POST.get('operation')=='backup' else None,initial={'directory':config['directory']})
-    restore=RestoreForm(request.POST if request.method=='POST' and request.POST.get('operation')=='restore' else None,request.FILES or None)
+    form=BackupForm(request.POST if request.method=='POST' and request.POST.get('operation')=='backup' else None,initial={'directory':config['directory'], 'kind':'local'},auto_id='backup_%s')
+    restore=RestoreForm(request.POST if request.method=='POST' and request.POST.get('operation')=='restore' else None,request.FILES or None,auto_id='restore_%s')
     try:
         if request.method=='POST' and request.POST.get('operation')=='backup' and form.is_valid():
-            directory=Path(form.cleaned_data['directory']);directory.mkdir(parents=True,exist_ok=True)
-            config['directory']=str(directory)
+            kind=form.cleaned_data['kind']
+            token=export_bundle(kind,config['key'])
+            root=Path(form.cleaned_data['directory']);directory=root/kind;directory.mkdir(parents=True,exist_ok=True)
+            config['directory']=str(root)
             config_path().write_text(json.dumps(config),encoding='utf-8')
-            name='settings-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.smbak'
-            (directory/name).write_text(export_settings(config['key']),encoding='utf-8')
+            name=kind+'-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.smbak'
+            (directory/name).write_text(token,encoding='utf-8')
             SettingsAudit.objects.create(actor=request.user,area='settings-backup',after={'file':name})
-            messages.success(request,'پشتیبان تنظیمات ذخیره شد: '+str(directory/name));return redirect('settings-backups')
+            messages.success(request,'پشتیبان '+LABELS[kind]+' ذخیره شد: '+str(directory/name));return redirect('settings-backups')
         if request.method=='POST' and request.POST.get('operation')=='restore' and restore.is_valid():
             file=restore.cleaned_data['backup']
-            if file.size>5_000_000: raise ValueError('حداکثر حجم فایل ۵ مگابایت است.')
-            # Before restoring, always retain a recoverable settings snapshot.
-            directory=Path(config['directory']);directory.mkdir(parents=True,exist_ok=True)
-            (directory/('before-restore-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.smbak')).write_text(export_settings(config['key']),encoding='utf-8')
-            restore_settings(file.read().decode('utf-8'),config['key'],request.user)
-            messages.success(request,'تنظیمات بازیابی شد؛ موارد جدیدی که در پشتیبان نبودند حفظ شدند.');return redirect('settings-backups')
+            kind=restore.cleaned_data['kind']
+            if file.size>100_000_000: raise ValueError('حداکثر حجم فایل ۱۰۰ مگابایت است.')
+            token=file.read().decode('utf-8')
+            if kind!='legacy': decode_bundle(token,config['key'],kind)
+            else: signing.loads(token,key=config['key'],salt='service-settings-v1')
+            # Preserve only the selected domain before an explicit restore.
+            safety_kind='local' if kind=='legacy' else kind
+            safety=export_bundle(safety_kind,config['key'])
+            directory=Path(config['directory'])/safety_kind;directory.mkdir(parents=True,exist_ok=True)
+            (directory/('before-restore-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')+'.smbak')).write_text(safety,encoding='utf-8')
+            if kind=='legacy': restore_settings(token,config['key'],request.user)
+            else: restore_bundle(token,config['key'],kind,request.user)
+            messages.success(request,'بخش انتخاب‌شده بازیابی شد؛ موارد جدید خارج از فایل حذف نشدند.');return redirect('settings-backups')
     except Exception as error:
         from django.core.exceptions import ValidationError
         if isinstance(error,(ValueError,ValidationError)): messages.error(request,str(error))
