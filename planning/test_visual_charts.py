@@ -53,3 +53,9 @@ class DistributionPresentationTests(SimpleTestCase):
         html=self.render_chart(rows,'bars')
         for i in range(10):
             self.assertIn(f'?month=1405-08&amp;city={i}',html)
+
+
+    def test_empty_label_uses_customer_or_unknown(self):
+        from planning.templatetags.dashboard_visuals import distribution
+        chart = distribution([{'label': '', 'customer': 'نمونه', 'count': 3}, {'label': None, 'count': 2}], 'آزمون')
+        self.assertEqual([r['label'] for r in chart['rows']], ['نمونه', 'نامشخص'])

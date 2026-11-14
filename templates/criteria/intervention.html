@@ -1,0 +1,11 @@
+{% extends 'base.html' %}{% load service_ui %}{% block content %}
+<div class="compact-toolbar"><h1>{{ row.title }}</h1><a class="small-button" href="{% url 'planning-interventions' %}?queue={{ row.queue }}">بازگشت به صف</a></div>
+<section class="panel padded"><strong>{{ row.customer }}</strong> · {{ row.cases|length }} کیس مرتبط
+<p>دلیل رسیدگی: {% for reason in row.rules.values %}{{ reason }}{% if not forloop.last %}، {% endif %}{% empty %}تعهد یا سابقه محلی{% endfor %} {{ row.reason }}</p>
+<p>مانع گزارش‌شده: {{ row.blocker|default:'ثبت نشده' }} · صاحب تصمیم: {{ row.owner|default:'تعیین نشده' }}</p>
+<p>آخرین پیگیری ثبت‌شده: {{ row.followup|persian_date }} · {{ row.last_result|default:'نتیجه ثبت نشده' }}</p>
+{% if row.warnings %}<p>اولین هشدار: {{ row.first_warning.created_at|persian_date }} · آخرین هشدار: {{ row.last_warning.created_at|persian_date }} · مخاطب: {{ row.last_warning.responsible }}</p>{% endif %}</section>
+<details class="evidence-disclosure"><summary>کیس‌های مرتبط و دلیل هر مورد</summary><ul>{% for case,rules in row.cases %}<li><a href="{% url 'crm-case' case.pk %}"><bdi>{{ case.number }}</bdi> · {{ case.title }}</a> · {% for rule in rules %}{{ rule.label }} {% empty %}بدون معیار منطبق{% endfor %}</li>{% endfor %}</ul></details>
+{% if request.user.is_staff %}<section class="panel padded"><h2>ثبت در پرونده رسیدگی</h2><form method="post">{% csrf_token %}{{ form.non_field_errors }}{% for field in form.hidden_fields %}{{ field }}{{ field.errors }}{% endfor %}<div class="form-grid">{% for field in form.visible_fields %}<div class="field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}</div><button class="button primary">ثبت</button></form></section>{% endif %}
+<details class="evidence-disclosure" open><summary>سابقه تصمیم‌ها، پیگیری‌ها و هشدارهای داخلی</summary><ul>{% for event in row.history %}<li>{{ event.created_at|persian_date }} · {{ event.label }} · {{ event.actor }} · {{ event.description }}{% if event.responsible %} · مسئول یا مخاطب: {{ event.responsible }}{% endif %}{% if event.decision_owner %} · صاحب تصمیم: {{ event.decision_owner }}{% endif %}{% if event.due %} · موعد: {{ event.due|persian_date }}{% endif %}{% if event.blocker %} · مانع: {{ event.blocker }}{% endif %}</li>{% empty %}<li>رویدادی ثبت نشده است.</li>{% endfor %}</ul></details>
+{% endblock %}

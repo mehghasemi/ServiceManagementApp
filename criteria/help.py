@@ -1,6 +1,13 @@
 """Task-oriented help; saved conditions remain the source of selection truth."""
 
 def explain_rule(rule):
+    if rule.metric == 'expression':
+        from .expressions import describe
+        return describe(rule.value, rule.settings.module)
+    from .engine import METRICS
+    from .temporal import METRICS, describe
+    if rule.metric in METRICS:
+        return describe(rule) + ' روزها بر مبنای تاریخ محلی تهران محاسبه می‌شوند. ماندگاری وضعیت نیازمند زمان ورود معتبر و انتظار پاسخ نیازمند پوشش کامل رویدادهاست.'
     from .engine import METRICS
     module = rule.settings.module
     metric = rule.metric

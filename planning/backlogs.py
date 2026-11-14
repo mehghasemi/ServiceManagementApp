@@ -108,7 +108,7 @@ def options(module='backlogs'):
 
 def snapshot_for(user, module='backlogs'):
     opt=options(module)
-    return shared_queryset(BacklogSnapshot.objects.all(),user).filter(scope=opt.scope,selection_key=selection_key(opt),job__config__module=module).order_by('-fetched_at','-pk').first()
+    return shared_queryset(BacklogSnapshot.objects.defer('records'),user).filter(scope=opt.scope,selection_key=selection_key(opt),job__config__module=module).order_by('-fetched_at','-pk').first()
 
 
 def publish(job,client,checkpoint):

@@ -29,6 +29,7 @@
       group.append(tile);
     });
   }
+  if(document.getElementById('report-designer'))return;
   document.querySelectorAll('.personal-dashboard-grid').forEach(stackTiles);
   const routes={'/':'home','/planning/':'planning','/planning/today/':'today','/projects/':'projects','/planning/backlogs/':'backlogs','/planning/visits/periodic/':'periodic','/planning/visits/onsite/':'onsite','/planning/upgrades/':'upgrades','/planning/suggestions/':'suggestions','/planning/actions/':'actions','/planning/attention/':'planning-attention','/projects/attention/':'projects-attention'};
   const host=document.getElementById('dashboard-builder'),custom=!!host;
@@ -48,6 +49,7 @@
     grid=make('div',null,'personal-dashboard-grid');
     const first=candidates[0];let anchor=first;while(anchor.parentElement && anchor.parentElement.id!=='main')anchor=anchor.parentElement;
     anchor.before(grid);
+    document.querySelectorAll('#main > form.filters').forEach(form=>grid.before(form));
     const parents=new Set();
     const statCount=candidates.filter(p=>p.classList.contains('stat')).length;
     const statWidth=statCount===4?3:statCount===2?6:4;
@@ -173,7 +175,7 @@
     document.getElementById('personal-title').addEventListener('input',mark);
     document.getElementById('widget-source').addEventListener('change',e=>{const kinds=document.getElementById('widget-kind'),temporal=e.target.value==='case-created';kinds.value='columns';const filter=document.getElementById('widget-filter');filter.disabled=temporal;if(temporal)filter.value='';Array.from(kinds.options).forEach(o=>o.disabled=!temporal&&['line','area'].includes(o.value));const split=document.getElementById('widget-split');split.replaceChildren(new Option('بدون تفکیک',''));if(!temporal)Array.from(e.target.options).filter(o=>o.dataset.module===e.target.selectedOptions[0].dataset.module&&o.value!=='case-created').forEach(o=>split.add(new Option(o.textContent,o.value)));});
     document.getElementById('widget-source').dispatchEvent(new Event('change'));
-    document.getElementById('add-widget').addEventListener('click',()=>{if(specs.length>=30){status.textContent='حداکثر ۳۰ ابزارک در هر داشبورد.';return;}const source=document.getElementById('widget-source'),kind=document.getElementById('widget-kind').value;const spec={id:'w-'+crypto.randomUUID(),source:source.value,kind,split:document.getElementById('widget-split').value,title:document.getElementById('widget-title').value,contains:document.getElementById('widget-filter').value,width:6,height:'normal',hidden:false};const tile=make('article',null,'dashboard-tile'),panel=make('section',null,'panel padded');tile.dataset.widgetId=spec.id;panel.append(make('h2',source.selectedOptions[0].textContent),make('p','پس از ذخیره چیدمان، اطلاعات همین منبع نمایش داده می‌شود.'));tile.append(panel);elements.set(spec.id,tile);specs.push(spec);controls(spec);apply();mark();});
+    document.getElementById('add-widget').addEventListener('click',()=>{if(specs.length>=30){status.textContent='حداکثر ۳۰ ابزارک در هر داشبورد.';return;}const source=document.getElementById('widget-source'),kind=document.getElementById('widget-kind').value;const spec={id:'w-'+Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join(''),source:source.value,kind,split:document.getElementById('widget-split').value,title:document.getElementById('widget-title').value,contains:document.getElementById('widget-filter').value,width:6,height:'normal',hidden:false};const tile=make('article',null,'dashboard-tile'),panel=make('section',null,'panel padded');tile.dataset.widgetId=spec.id;panel.append(make('h2',source.selectedOptions[0].textContent),make('p','پس از ذخیره چیدمان، اطلاعات همین منبع نمایش داده می‌شود.'));tile.append(panel);elements.set(spec.id,tile);specs.push(spec);controls(spec);apply();mark();});
   }
   window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
 })();

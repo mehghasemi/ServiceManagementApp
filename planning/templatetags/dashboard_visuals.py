@@ -12,7 +12,7 @@ def distribution(rows, title, kind='ring', note=''):
     for index, row in enumerate(values):
         count = max(0, int(row.get('count', 0)))
         share = count * 100 / total if total else 0
-        row.setdefault('label',row.get('customer','نامشخص'))
+        row['label'] = row.get('label') or row.get('customer') or 'نامشخص'
         row.update(y=150-(count * 150 / peak if peak else 0),share=share, offset=-offset, height=count * 150 / peak if peak else 0, color=index % 6)
         start=math.radians(offset*3.6-90); end=math.radians((offset+share)*3.6-90)
         row['pie_path']=f'M60 60 L{60+46*math.cos(start):.4f} {60+46*math.sin(start):.4f} A46 46 0 {1 if share>50 else 0} 1 {60+46*math.cos(end):.4f} {60+46*math.sin(end):.4f} Z'

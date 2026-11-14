@@ -21,7 +21,7 @@ def day(value):
         return timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
     if isinstance(value, date):
         return value
-    value = str(value)
+    value = str(value).translate(str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')).replace('\u200e', '').replace('\u200f', '').strip()
     try:
         if '/' in value:
             y, m, d = map(int, value.split('/'))
@@ -72,6 +72,8 @@ def validate_filter(node, fields, depth=0, budget=None):
         raise ValueError('شرط شامل فقط برای متن است.')
     if any(not isinstance(v, (str, int, float)) or isinstance(v, bool) or len(str(v)) > 500 or typed(v, kind) is None for v in values):
         raise ValueError('نوع مقدار شرط با فیلد سازگار نیست.')
+    if op == 'between' and typed(values[0], kind) > typed(values[1], kind):
+        raise ValueError('ابتدای بازه باید قبل از انتهای آن باشد.')
 
 
 def matches(row, node, fields):
@@ -100,12 +102,17 @@ def matches(row, node, fields):
 
 
 def validate_query(query):
-    if not isinstance(query, dict) or set(query) - {'source', 'dimensions', 'metric', 'filter', 'empty', 'order', 'columns'}:
+    if not isinstance(query, dict) or set(query) - {'source', 'dimensions', 'metric', 'filter', 'empty', 'order', 'columns', 'date_range'}:
         raise ValueError('طرح گزارش معتبر نیست.')
     source = schema().get(query.get('source'))
     if not source:
         raise ValueError('منبع داده مجاز نیست.')
     fields = source['fields']
+    date_range = query.get('date_range')
+    if date_range:
+        if not isinstance(date_range, dict) or set(date_range) != {'field', 'start', 'end'} or fields.get(date_range.get('field'), {}).get('type') != 'date':
+            raise ValueError('فیلد بازه زمانی باید از نوع تاریخ باشد.')
+        validate_filter({'field': date_range['field'], 'op': 'between', 'value': [date_range['start'], date_range['end']]}, fields)
     dimensions = query.get('dimensions', [])
     if not isinstance(dimensions, list) or len(dimensions) > 4:
         raise ValueError('حداکثر چهار بُعد انتخاب کنید.')
@@ -175,6 +182,9 @@ def execute(rows, query, extra_filters=None, group=None, page=1):
     validate_query(query)
     fields = schema()[query['source']]['fields']
     filters = [query.get('filter')] + (extra_filters or [])
+    if query.get('date_range'):
+        period = query['date_range']
+        filters.append({'field': period['field'], 'op': 'between', 'value': [period['start'], period['end']]})
     for node in filters: validate_filter(node, fields)
     selected = [row for row in rows if all(matches(row, node, fields) for node in filters)]
     dims = query.get('dimensions', []); groups = defaultdict(list)

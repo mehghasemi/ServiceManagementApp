@@ -81,3 +81,27 @@ svg a{cursor:pointer}svg a:focus-visible{outline:3px solid var(--accent)}.donut>
 #main>.dashboard-header{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-start;gap:8px 16px;min-height:0;margin-block:8px;padding:0}
 .dashboard-header h1{margin:0;font-size:20px}.dashboard-header .builder-toolbar{margin-inline-start:auto;padding:0;gap:8px}
 .builder-toolbar [role=status]:empty{display:none}.personal-dashboard-grid{margin-block:10px}
+
+/* Shared dashboard geometry: container width, rather than monitor width, drives layout. */
+.personal-dashboard-grid{container-type:inline-size;container-name:dashboard;grid-template-columns:repeat(36,minmax(0,1fr));row-gap:12px;column-gap:clamp(2px,.5vw,10px)}
+.personal-dashboard-grid>.tile-width-1{grid-column:span 4}.personal-dashboard-grid>.tile-width-2{grid-column:span 6}
+.personal-dashboard-grid>.tile-width-3{grid-column:span 9}.personal-dashboard-grid>.tile-width-4{grid-column:span 12}
+.personal-dashboard-grid>.tile-width-6{grid-column:span 18}.personal-dashboard-grid>.tile-width-8{grid-column:span 24}
+.personal-dashboard-grid>.tile-width-12{grid-column:span 36}
+.dashboard-stack{gap:12px}.dashboard-stack>.dashboard-tile{min-width:0;max-width:100%}
+.dashboard-tile .chart-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.dashboard-tile h2{line-height:1.65;overflow-wrap:anywhere}.dashboard-tile .chart-heading h2{font-size:14px;margin:0}
+.dashboard-tile .horizontal-chart{gap:10px;padding:4px}.dashboard-tile .horizontal-chart a{overflow-wrap:anywhere}
+.dashboard-tile .visual-legend{min-width:0;max-height:230px;overflow:auto}.dashboard-tile .visual-legend a{overflow-wrap:anywhere}
+.dashboard-tile .status-composition{min-height:0;gap:12px}.dashboard-tile .status-legend{min-width:0}
+.dashboard-tile .creation-area{height:auto;max-height:230px}.dashboard-tile .filters{gap:6px;padding:4px}
+.dashboard-tile .visual-columns{max-height:300px;overflow:auto}
+@container dashboard (max-width:800px){.personal-dashboard-grid>.dashboard-stack,.personal-dashboard-grid>.dashboard-tile{grid-column:span 18}.personal-dashboard-grid>.tile-width-8,.personal-dashboard-grid>.tile-width-12{grid-column:span 36}}
+@container dashboard (max-width:520px){.personal-dashboard-grid>.dashboard-stack,.personal-dashboard-grid>.dashboard-tile{grid-column:1/-1}}
+
+/* Long category lists scroll within their card; filters remain ahead of the dashboard. */
+.dashboard-tile.tile-height-normal>.panel{max-height:380px;overflow:auto;overscroll-behavior:contain}
+.dashboard-tile.tile-height-compact>.panel{max-height:280px;overflow:auto}
+.dashboard-tile.tile-height-tall>.panel{max-height:560px;overflow:auto}
+.dashboard-tile .visit-breakdown>div{padding-block:8px}.dashboard-tile .visit-breakdown strong{font-size:.8rem}
+.dashboard-tile .chart-note{font-size:.72rem;line-height:1.6}.dashboard-tile .city-columns{min-width:600px}

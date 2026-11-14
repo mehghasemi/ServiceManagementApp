@@ -25,6 +25,8 @@ def validate_configuration(config, widgets):
             raise ValueError('فیلد فیلتر عمومی مجاز نیست.')
         if item.get('control') not in ('single', 'multi', 'text', 'number', 'range', 'date_range'):
             raise ValueError('نوع کنترل فیلتر معتبر نیست.')
+        if item.get('control') == 'date_range' and (source['fields'][item['field']]['type'] != 'date' or item.get('op') != 'between'):
+            raise ValueError('بازه تاریخ شمسی باید به فیلد تاریخ و شرط بین دو مقدار متصل شود.')
         if item.get('op') not in ('eq', 'in', 'contains', 'between', 'gte', 'lte'):
             raise ValueError('عملگر فیلتر معتبر نیست.')
         if not isinstance(item.get('targets', []), list) or not isinstance(item.get('parents', []), list):

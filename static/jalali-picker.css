@@ -1,0 +1,3 @@
+.jalali-picker{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}.jalali-date{display:flex;gap:.25rem;align-items:center}.jalali-date input{width:6rem!important;min-width:4rem;direction:ltr}.jalali-date select{width:auto!important;min-width:4rem}.jalali-picker small{white-space:nowrap}@media(max-width:600px){.jalali-picker{align-items:stretch}.jalali-date{flex-wrap:wrap}}
+
+.chart-date-range{display:flex;flex-wrap:wrap!important;align-items:end}.chart-date-range>label{flex:1 1 210px;min-width:0;max-width:100%}.chart-date-range .jalali-date{flex-wrap:wrap}.chart-date-settings{font-size:.8rem;margin-block:8px}.chart-date-settings summary{cursor:pointer}.chart-date-range input,.chart-date-range select{min-height:32px;padding:4px}

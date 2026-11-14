@@ -57,6 +57,7 @@ class Sources:
 
     def __init__(self, user):
         self.user, self.cache = user, {}
+        self.case_source = None
 
     def load(self, source):
         if source not in CONTRACTS:
@@ -67,8 +68,11 @@ class Sources:
         from planning.backlogs import snapshot_for
         from projects.views import snapshot_for as project_snapshot
         if source in ('cases', 'activities', 'customers'):
-            snapshot = active_snapshot(self.user)
-            raw = list(current_cases(self.user)[:self.LIMIT + 1])
+            if self.case_source is None:
+                snapshot = active_snapshot(self.user)
+                raw = list(snapshot.cases.all()[:self.LIMIT + 1]) if snapshot else []
+                self.case_source = snapshot, raw
+            snapshot, raw = self.case_source
             if len(raw) > self.LIMIT:
                 raise ValueError('حجم منبع بیش از حد مجاز است؛ View محدودتری انتخاب کنید.')
             if source == 'cases':

@@ -18,6 +18,11 @@ def context(module, mode):
 
 
 def rule_description(rule, module):
+    if rule.metric == 'expression':
+        from .expressions import describe
+        return describe(rule.value, module)
+    from .temporal import METRICS as temporal_metrics, describe
+    if rule.metric in temporal_metrics: return describe(rule)
     value = rule.value
     text = '، '.join(str(v) for v in value) if isinstance(value, list) else ('بله' if value else 'خیر') if isinstance(value, bool) else str(value)
     return f"{METRICS[module].get(rule.metric, (rule.metric,))[0]} · {OPERATORS.get(rule.operator, rule.operator)} · {text}"
@@ -61,7 +66,24 @@ def edit(request, module, pk=None):
     before = model_to_dict(rule) if pk else {}
     form = RuleForm(request.POST or None, instance=rule, module=module)
     status = 200
-    if request.method == 'POST' and form.is_valid():
+    preview = None
+    if request.method == 'POST' and form.is_valid() and request.POST.get('intent') == 'preview':
+        from copy import copy
+        from .engine import matches
+        candidate = copy(form.instance)
+        candidate.enabled = True
+        records = source_records(request.user, module)
+        preview = {'total': len(records), 'matched': 0, 'unknown': 0, 'samples': []}
+        for item, facts in records:
+            result = matches(candidate, facts)
+            if result is True:
+                preview['matched'] += 1
+                if len(preview['samples']) < 10:
+                    preview['samples'].append(item)
+            elif result is None:
+                preview['unknown'] += 1
+        preview['unmatched'] = preview['total'] - preview['matched'] - preview['unknown']
+    elif request.method == 'POST' and form.is_valid():
         with transaction.atomic():
             ModuleSettings.objects.select_for_update().get(pk=options.pk)
             current = EvaluationRule.objects.select_for_update().get(pk=pk) if pk else None
@@ -83,20 +105,35 @@ def edit(request, module, pk=None):
                 SettingsAudit.objects.create(actor=request.user, area=module+':rule', before=before, after=model_to_dict(saved))
                 messages.success(request, 'معیار ذخیره شد و در تحلیل بعدی اعمال می‌شود.')
                 return redirect(module+'-criteria')
-    return render(request, 'criteria/edit.html', {**context(module, 'criteria'), 'form': form, 'is_new': pk is None}, status=status)
+    from .expressions import catalogue
+    return render(request, 'criteria/edit.html', {**context(module, 'criteria'), 'form': form, 'is_new': pk is None, 'criterion_catalogue': catalogue(module), 'preview': preview}, status=status)
 
 
-def evaluations(user, module):
+def source_records(user, module):
     options = module_settings(module)
-    rules = ensure_rules(options)
     today = timezone.localdate()
     if module == 'planning':
         snapshot = active_snapshot(user)
-        records = planning_facts(current_cases(user), user, bool(snapshot and snapshot.coverage.get('notes')), today)
-    else:
-        from projects.views import snapshot_for
+        return planning_facts(current_cases(user), user, bool(snapshot and snapshot.coverage.get('notes')), today)
+    if module == 'backlogs':
+        from planning.backlogs import snapshot_for
         snapshot = snapshot_for(user)
-        records = [(r, project_facts(r, options, bool(snapshot.coverage.get('notes')), today)) for r in snapshot.records] if snapshot else []
+        result = []
+        for row in snapshot.records if snapshot else []:
+            evidence = row.get('evidence', {})
+            state = evidence.get('state')
+            facts = {k: evidence.get(k) or None for k in ('case_service','sprint','release')}
+            facts.update(source_status=row.get('source_status') or None, active=state == 0 if state is not None else None)
+            result.append((row, facts))
+        return result
+    from projects.views import snapshot_for
+    snapshot = snapshot_for(user)
+    return [(r, project_facts(r, options, bool(snapshot.coverage.get('notes')), today)) for r in snapshot.records] if snapshot else []
+
+
+def evaluations(user, module):
+    rules = ensure_rules(module_settings(module))
+    records = source_records(user, module)
     hits, counts = evaluate_records(records, rules)
     return hits, counts, records, rules
 

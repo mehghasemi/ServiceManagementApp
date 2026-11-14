@@ -17,7 +17,7 @@ from .services import dashboard_data
 
 def snapshot_for(user):
     options = module_settings('projects')
-    return shared_queryset(ProjectSnapshot.objects.all(), user).filter(scope=configuration().scope, selection_key=selection_key(options)).order_by('-fetched_at').first()
+    return shared_queryset(ProjectSnapshot.objects.defer('records'), user).filter(scope=configuration().scope, selection_key=selection_key(options)).order_by('-fetched_at').first()
 
 
 @operator_required

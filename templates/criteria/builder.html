@@ -1,0 +1,11 @@
+<section id="criterion-builder" aria-label="شرط‌های ترکیبی">
+<h2>شرط‌های معیار</h2><p class="muted">فیلد، شرط و مقدار را انتخاب کنید. برای ترکیب «و / یا» گروه اضافه کنید. داده دریافت‌نشده با نبود رویداد یکسان نیست.</p>
+<div id="criterion-tree"></div><p id="criterion-feedback" role="status" aria-live="polite"></p>
+<noscript>برای ساخت شرط‌های ترکیبی JavaScript مرورگر باید فعال باشد. معیار ساده همچنان قابل استفاده است.</noscript>
+</section>
+{% if preview %}<section class="notice" role="status" aria-live="polite"><h2>پیش‌نمایش؛ هنوز ذخیره نشده</h2>
+<p>منبع: آخرین داده دریافت‌شده همین ماژول؛ دریافت تازه از CRM انجام نمی‌شود. معیار در پیش‌نمایش فعال فرض می‌شود.</p>
+<p>کل: {{ preview.total }} · منطبق: {{ preview.matched }} · نامنطبق: {{ preview.unmatched }} · اطلاعات ناکافی: {{ preview.unknown }}</p>
+{% if not preview.total %}<p>داده‌ای در منبع مجاز موجود نیست؛ ابتدا View و دریافت اطلاعات ماژول را بررسی کنید.</p>{% endif %}
+{% if preview.samples %}<div class="table-wrap"><table><caption>حداکثر ۱۰ نمونه منطبق</caption><thead><tr><th>شماره</th><th>عنوان</th><th>مشتری</th></tr></thead><tbody>{% for item in preview.samples %}<tr><td><bdi>{{ item.number|default:'—' }}</bdi></td><td>{{ item.title|default:'—' }}</td><td>{{ item.customer|default:'—' }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</section>{% endif %}

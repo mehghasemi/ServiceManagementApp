@@ -118,7 +118,7 @@ def layout(request,key):
 def shared_dashboard(request,key):
     row=get_object_or_404(DashboardPublication,key=key,key__startswith='custom-',enabled=True)
     if row.configuration.get('version') == 2 or any(w.get('source') == 'dynamic' for w in row.widgets):
-        return render(request, 'dashboards/designer.html', {'dashboard': row, 'shared': True, 'mode': 'personal-dashboards'})
+        return render(request, 'dashboards/designer.html', {'dashboard': row, 'shared': True, 'can_edit_source': PersonalDashboard.objects.filter(user=request.user, key=key).exists(), 'mode': 'personal-dashboards'})
     return render(request,'dashboards/detail.html',{'dashboard':row,'widgets':chart_data(request.user,row.widgets,request),'shared':True,'mode':'personal-dashboards'})
 
 
@@ -134,6 +134,8 @@ def publish(request,key):
     except (ValueError,KeyError,TypeError,UnicodeDecodeError):
         return JsonResponse({'error':'درخواست انتشار معتبر نیست.'},status=400)
     draft=get_object_or_404(PersonalDashboard,user=request.user,key=key)
+    if enabled and key.startswith('custom-') and not any(not w.get('hidden', False) for w in draft.widgets):
+        return JsonResponse({'error':'داشبورد خالی یا همه ابزارک‌ها پنهان‌اند؛ ابتدا یک نمودار قابل نمایش بسازید.'},status=400)
     if draft.revision!=revision:return JsonResponse({'error':'پیش‌نویس تغییر کرده است؛ صفحه را تازه کنید.'},status=409)
     current=DashboardPublication.objects.filter(key=key).first()
     values={'title':draft.title,'widgets':draft.widgets,'configuration':draft.configuration,'enabled':enabled,'publisher':request.user,'updated_at':timezone.now()}

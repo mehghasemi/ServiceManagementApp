@@ -34,6 +34,51 @@ class CriteriaTests(TestCase):
         self.assertTrue(page.context['page'].paginator.count > 0)
         self.assertEqual(self.client.get('/planning/attention/?group=invalid').context['page'].paginator.count, 0)
 
+    def test_intervention_group_commitment_and_history(self):
+        from planning.interventions import collect
+        from planning.models import InterventionEvent
+        from config.dates import persian_date
+        cases = self.cases()
+        groups = collect(self.user)
+        group = next(row for row in groups.values() if len(row['cases']) == 2)
+        self.assertEqual({c.customer_id for c,_ in group['cases']}, {'a'})
+        url = '/planning/interventions/' + group['key'] + '/'
+        data = dict(kind='decision', queue='customer', description='هماهنگی زمان نصب',
+                    responsible='هماهنگ‌کننده', decision_owner='مدیر خدمات', blocker='انتظار زمان نصب',
+                    due=persian_date(timezone.localdate()+timedelta(days=3)),
+                    revision=0, evidence_hash=group['fingerprint'])
+        self.assertEqual(self.client.post(url,data).status_code,302)
+        self.assertEqual(self.client.post(url,data).status_code,409)
+        board=self.client.get('/planning/interventions/',{'queue':'customer'})
+        self.assertEqual(board.context['page'].paginator.count,1)
+        for rev,kind in [(1,'warning'),(2,'followup')]:
+            self.assertEqual(self.client.post(url,{**data,'kind':kind,'revision':rev}).status_code,302)
+        row=self.client.get(url).context['row']
+        self.assertEqual(len(row['warnings']),1)
+        self.assertIsNotNone(row['followup'])
+        self.assertEqual(row['queue'],'customer')
+        InterventionEvent.objects.filter(issue=group['key'],kind='decision').update(due=timezone.localdate()-timedelta(days=1))
+        self.assertEqual(collect(self.user)[group['key']]['queue'],'decision')
+        self.client.force_login(get_user_model().objects.create_user('other-operator',is_staff=True))
+        self.assertEqual(self.client.get(url).status_code,404)
+
+    def test_queue_report_counts_and_drilldown(self):
+        cases = self.cases()
+        cases.filter(customer_id='a',parent_id='p').update(source_status='Done')
+        response = self.client.get('/planning/interventions/')
+        self.assertEqual(response.context['selected'], 'review')
+        self.assertEqual(response.context['tabs'][0][0], 'review')
+        self.assertEqual(response.context['total_topics'], sum(count for _, _, count in response.context['tabs']))
+        self.assertEqual(response.context['total_cases'], 4)  # The fifth case is outside all queues.
+        report = response.context['report']
+        rule = self.rule('resolution_review')
+        entry = next(item for item in report['reasons'] if item['id'] == rule.pk)
+        self.assertEqual((entry['topics'], entry['cases']), (3, 4))
+        filtered = self.client.get('/planning/interventions/', {'queue':'review','rule':rule.pk})
+        self.assertEqual(filtered.context['page'].paginator.count, entry['topics'])
+        self.assertEqual(filtered.context['report'], report)
+        self.assertContains(filtered, 'وضعیت کیس در CRM')
+
     def rule(self, code):
         return self.options.rules.get(code=code)
 

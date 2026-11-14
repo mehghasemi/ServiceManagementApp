@@ -108,3 +108,22 @@ class DashboardPublication(models.Model):
     revision = models.PositiveIntegerField(default=1)
     publisher = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class InterventionEvent(models.Model):
+    """One local decision, follow-up or internal warning for a planning issue."""
+    issue = models.CharField(max_length=64, db_index=True)
+    revision = models.PositiveIntegerField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    kind = models.CharField(max_length=16)
+    queue = models.CharField(max_length=16, blank=True)
+    description = models.CharField(max_length=500)
+    responsible = models.CharField(max_length=120, blank=True)
+    decision_owner = models.CharField(max_length=120, blank=True)
+    blocker = models.CharField(max_length=500, blank=True)
+    due = models.DateField(null=True, blank=True)
+    evidence_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['issue', 'revision'], name='unique_intervention_revision')]

@@ -51,6 +51,23 @@ class QueryEngineTests(SimpleTestCase):
             query['metric']['formula']['right'] = bad
             with self.assertRaises(ValueError): validate_query(query)
 
+    def test_persian_date_boundaries_and_reversed_range(self):
+        from planning.reporting.engine import day
+        self.assertEqual(str(day('۱۴۰۵/۰۱/۰۱')), '2026-03-21')
+        self.assertIsNone(day('1400/12/30'))
+        self.assertIsNotNone(day('1399/12/30'))
+        with self.assertRaises(ValueError):
+            validate_query({**self.query, 'filter': {'field':'created', 'op':'between', 'value':['1405/02/01','1405/01/01']}})
+
+    def test_widget_date_range_filters_chart_and_details(self):
+        query={**self.query, 'date_range':{'field':'created','start':'1405/01/01','end':'1405/12/29'}}
+        result=execute(self.rows,query)
+        self.assertEqual(result['rows'][0]['value'],1)
+        self.assertEqual(result['detail_count'],1)
+        self.assertEqual(result['records'][0]['id'],'2')
+        with self.assertRaises(ValueError):
+            validate_query({**query,'date_range':{'field':'customer','start':'1405/01/01','end':'1405/12/29'}})
+
     def test_invalid_fields_and_complexity_rejected(self):
         for change in [{'source': 'users'}, {'dimensions': [{'field': 'password'}]}, {'filter': {'field': 'id', 'op': 'sql', 'value': 'x'}}]:
             with self.assertRaises(ValueError): validate_query({**self.query, **change})
@@ -128,3 +145,16 @@ class ReportingRoutesTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get('/dashboards/data/metadata/').status_code, 403)
         self.assertEqual(self.post('/dashboards/data/preview/', self.payload).status_code, 403)
+
+
+    def test_empty_publication_rejected_and_owner_edit_link(self):
+        draft = PersonalDashboard.objects.create(user=self.user, key='custom-empty', title='Empty', configuration={'version': 2})
+        response = self.post('/preferences/dashboards/custom-empty/publish/', {'revision': 1, 'publication_revision': 0})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(DashboardPublication.objects.filter(key=draft.key).exists())
+        draft.widgets = [self.widget]; draft.save()
+        self.assertEqual(self.post('/preferences/dashboards/custom-empty/publish/', {'revision': 1, 'publication_revision': 0}).status_code, 200)
+        self.assertContains(self.client.get('/dashboards/shared/custom-empty/'), 'ویرایش نسخه اصلی داشبورد')
+        other = get_user_model().objects.create_user('publication-viewer', is_staff=True)
+        self.client.force_login(other)
+        self.assertNotContains(self.client.get('/dashboards/shared/custom-empty/'), 'ویرایش نسخه اصلی داشبورد')

@@ -14,6 +14,8 @@ METRICS = {
         'release': ('ریلیز بکلاگ', 'text'),
     },
     'planning': {
+        'customer': ('نام مشتری', 'text'),
+        'customer_id': ('شناسه مشتری؛ تطبیق دقیق', 'text'),
         'fix_newer': ('نگارش رفع کیس جدیدتر از نگارش فعلی مشتری است', 'bool'),
         'incident_type': ('نوع رکورد؛ Issue یا Backlog', 'text'),
         'case_category': ('دسته درخواست؛ مانند باگ یا قابلیت جدید', 'text'),
@@ -30,6 +32,8 @@ METRICS = {
         'blocker_count': ('تعداد اقدام محلی دارای مانع', 'number'),
     },
     'projects': {
+        'customer': ('نام مشتری', 'text'),
+        'manager': ('مدیر پروژه', 'text'),
         'status': ('وضعیت پروژه', 'text'),
         'phase': ('مرحله پروژه', 'text'),
         'manager_missing': ('مدیر پروژه در داده موجود نیست', 'bool'),
@@ -39,6 +43,10 @@ METRICS = {
         'no_note': ('یادداشت در View موجود نیست', 'bool'),
     },
 }
+from .temporal import METRICS as TEMPORAL_METRICS
+METRICS['planning'].update(TEMPORAL_METRICS)
+METRICS['projects'].update({k:v for k,v in TEMPORAL_METRICS.items() if k != 'customer_wait'})
+
 OPERATORS = {'eq': 'برابر', 'ne': 'نابرابر', 'gt': 'بیشتر از', 'gte': 'بیشتر یا مساوی', 'lt': 'کمتر از', 'lte': 'کمتر یا مساوی', 'in': 'یکی از مقادیر', 'contains_any': 'شامل یکی از عبارت‌ها'}
 ALLOWED = {'number': ('eq', 'ne', 'gt', 'gte', 'lt', 'lte'), 'bool': ('eq', 'ne'), 'text': ('in', 'contains_any')}
 
@@ -65,6 +73,12 @@ def matches(rule, facts):
             return None
         if not facts['active']:
             return False
+    if rule.metric == 'expression':
+        from .expressions import evaluate
+        return evaluate(rule.value, facts, rule.settings.module)
+    if rule.metric in TEMPORAL_METRICS:
+        from .temporal import outcome
+        return outcome(rule, facts)
     actual = facts.get(rule.metric)
     if actual is None:
         return None
@@ -103,7 +117,7 @@ def planning_facts(cases, user, loaded, today):
     result = []
     for case in rows:
         state = case.evidence.get('state')
-        facts = {'fix_newer': None, 'incident_type': case.evidence.get('incident_type') or None, 'case_category': case.evidence.get('case_category') or None, 'parent_type': case.evidence.get('parent_details', {}).get('type') or None, 'active': state == 0 if state is not None else None,
+        facts = {'customer': case.customer or None, 'customer_id': case.customer_id or None, '_evidence': case.evidence, '_today': today, '_notes_loaded': loaded, 'fix_newer': None, 'incident_type': case.evidence.get('incident_type') or None, 'case_category': case.evidence.get('case_category') or None, 'parent_type': case.evidence.get('parent_details', {}).get('type') or None, 'active': state == 0 if state is not None else None,
                  'has_parent': bool(case.parent_id), 'parent_status': case.parent_status or None,
                  'source_status': case.source_status or None, 'parent_title': case.parent_title or None,
                  'title': case.title or None, 'open_count': len(case.rule_actions),
@@ -120,7 +134,7 @@ def project_facts(row, options, loaded, today):
     status = row.get('status')
     active = (state == 0 and status.strip().casefold() not in closed) if state is not None and status else None
     end = day(row.get('planned_end'))
-    return {'active': active, 'status': status or None, 'phase': row.get('phase') or None,
+    return {'customer': row.get('customer') or None, 'manager': row.get('manager') or None, '_evidence': row, '_today': today, '_notes_loaded': loaded, 'active': active, 'status': status or None, 'phase': row.get('phase') or None,
             'manager_missing': not row.get('manager'), 'planned_end_missing': not row.get('planned_end'),
             'overdue_days': (today-end).days if end else None,
             **note_facts(row.get('notes', []), loaded, today)}

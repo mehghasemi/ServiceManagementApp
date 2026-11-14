@@ -38,3 +38,5 @@ Select the smallest relevant skill set; do not load every UI skill for every cha
 - [.agents/skills/ui-quality-audit/SKILL.md](.agents/skills/ui-quality-audit/SKILL.md): evidence-based UI acceptance and regression review.
 
 Design-system targets are acceptance requirements for affected work, not proof that every existing page already complies. Documentation or skill installation alone does not authorize page redesign or production activation.
+
+For every change affecting a user workflow, including save errors and return navigation, apply the [Persian desktop workflow criteria](docs/design-system.md#desktop-workflow). Identify the user task and verify the affected acceptance scenario before delivery. The owner requires an explicit release request before issuing a new version or activating production.

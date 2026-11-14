@@ -11,7 +11,7 @@ SETTINGS_MODELS = (crm.SystemSettings, crm.CRMView, crm.ModuleSettings, crm.Eval
 LOCAL_MODELS = (Group, get_user_model(), *SETTINGS_MODELS, planning.GridPreference,
     planning.PersonalDashboard, planning.DashboardPublication, planning.Program,
     planning.Case, planning.FollowUp, planning.AuditEvent, planning.Mutation,
-    crm.CRMCase, crm.CaseAction, crm.ActionAudit, crm.SettingsAudit)
+    crm.CRMCase, crm.CaseAction, crm.ActionAudit, crm.SettingsAudit, planning.InterventionEvent)
 DATA_MODELS = (crm.SyncJob, crm.CRMCase, crm.PlanningSnapshot, crm.ProjectSnapshot, crm.BacklogSnapshot)
 LABELS = {'local': 'تنظیمات، کاربران و اطلاعات محلی', 'crm': 'داده‌های دریافتی CRM'}
 SALT = 'service-separated-backup-v2'
